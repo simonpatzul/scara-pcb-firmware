@@ -7,7 +7,7 @@ Software del robot SCARA RRP para la PCB nueva (tarjeta de control + tarjeta de 
 | `alto_nivel/` | PC con ROS 2 | Workspace de ROS 2: bridge serie, teleop, punto a punto, URDF y la secuencia de la Estación 1 (pick & place). Parte de [jer0valencia/SCARA_RRP](https://github.com/jer0valencia/SCARA_RRP) (commit 26dd87b). Ver [`alto_nivel/README.md`](alto_nivel/README.md) |
 | `bajo_nivel/pico/` | Raspberry Pi Pico | Control de los 3 ejes, servo y bomba. Parte de [jer0valencia/SCARA_RRP_](https://github.com/jer0valencia/SCARA_RRP_) (commit a45484c), adaptado a la PCB |
 | `bajo_nivel/stm32/` | STM32F030C8T6 | Protección de corriente, enables de los drivers y telemetría MQTT por el FC41D |
-| `scada/` | Navegador | Página SCADA (`index.html`): lee el MQTT del STM32 y del PC |
+| `web/` | PC o servidor | Página SCADA: `frontend/` (la página) y `backend/` (servidor con historial). Ver [`web/README.md`](web/README.md) |
 | `docs/` | — | Análisis de los esquemáticos (`analisis_pcb.md`), formato de los mensajes MQTT (`mqtt.md`) y documentación general (`documentacion_scara.html`) |
 
 ## Cómo encaja todo
@@ -18,7 +18,7 @@ Software del robot SCARA RRP para la PCB nueva (tarjeta de control + tarjeta de 
                                                  |  I2C (latido 20 ms)     |             v
                                                  +----------------------> STM32 <--------+
                                                                             |
-                                                                 USART  --> FC41D --Wi-Fi--> broker MQTT --> SCADA
+                                                                 USART  --> FC41D --Wi-Fi--> broker MQTT --> web (backend + página SCADA)
 ```
 
 - **La Pico** controla los ejes igual que antes (RST a 100 Hz, home, watchdog de 200 ms del PC). La diferencia es que ya no maneja los EN de los drivers: se los pide al STM32.

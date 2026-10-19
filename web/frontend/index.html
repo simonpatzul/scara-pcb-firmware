@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SCADA Estación 1 SCARA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: consola de sala de control, un solo tema oscuro a propósito.
+   Barra de estación → indicadores del ciclo (tiempo 20–50 s) → celda de trabajo + pila/bandeja/secuencia
+   → ciclo de la Pico y comunicación → placas de eje → sistema y alarmas. */
+:root {
+  color-scheme: dark;
+  --bg: #0f1215;
+  --panel: #181d22;
+  --panel-2: #1f262c;
+  --well: #0a0d0f;          /* pozos de display, como un LCD empotrado */
+  --bezel: #2c353d;
+  --ink: #e2e8ec;
+  --muted: #8794a0;
+  --line: #333d46;
+  --process: #8fbfe6;       /* valores de proceso y brazo */
+  --process-soft: #3c5468;
+  --signal: #f2b200;        /* amarillo industrial: estación, selección */
+  --signal-ink: #1a1400;
+  --ok: #45c46b;
+  --warn: #f2b200;
+  --warn-ink: #1a1400;
+  --alarm: #ff4438;
+  --alarm-ink: #ffffff;
+  --stale: #5d6872;
+  --card: #2f7d4f;          /* PCB virgen (FR4 verde) */
+  --card-edge: #6fd39a;
+  --f-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.4;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 32px;
+}
+.wrap { max-width: 1360px; margin: 0 auto; display: grid; gap: 10px; }
+.num { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+.lbl { font-family: var(--f-display); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; font-size: 12.5px; color: var(--muted); }
+.tag { font: 500 11px var(--f-data); color: var(--muted); letter-spacing: .02em; }
+h1, h2 { font-family: var(--f-display); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 0; text-wrap: balance; }
+h2 { font-size: 14px; color: var(--ink); }
+.panel { background: var(--panel); border: 1px solid var(--bezel); border-radius: 2px; min-width: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.panel > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; background: var(--panel-2); border-bottom: 1px solid var(--bezel); }
+.panel > header h2::before { content: ""; display: inline-block; width: 6px; height: 12px; background: var(--signal); margin-right: 8px; vertical-align: -1px; }
+.body { padding: 10px; }
+.well { background: var(--well); border: 1px solid var(--bezel); box-shadow: inset 0 2px 6px rgba(0,0,0,.6); border-radius: 2px; padding: 8px 10px; }
+button {
+  font: 600 13px var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink);
+  background: linear-gradient(var(--panel-2), var(--panel)); border: 1px solid var(--bezel); border-radius: 2px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+button.primary { background: var(--signal); color: var(--signal-ink); border-color: var(--signal); }
+
+/* Barra de estación */
+.hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--signal) 0 10px, #111 10px 20px); }
+.station { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 0 2px; }
+.station .id { display: flex; align-items: center; gap: 12px; margin-right: auto; min-width: 0; }
+.station .badge { font: 700 26px/1 var(--f-display); background: var(--signal); color: var(--signal-ink); padding: 6px 10px; border-radius: 2px; letter-spacing: .02em; }
+.station h1 { font-size: 22px; line-height: 1.05; }
+.station .id small { display: block; color: var(--muted); font-size: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 2px; border: 1px solid var(--bezel);
+  font: 600 13px var(--f-display); letter-spacing: .07em; text-transform: uppercase; background: var(--panel); white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--stale); flex: none; }
+.chip.ok .dot { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.chip.warn { background: var(--warn); color: var(--warn-ink); border-color: var(--warn); }
+.chip.warn .dot { background: var(--warn-ink); }
+.chip.alarm { background: var(--alarm); color: var(--alarm-ink); border-color: var(--alarm); }
+.chip.alarm .dot { background: var(--alarm-ink); }
+.station .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Indicadores principales */
+.kpis { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.6fr) repeat(3, minmax(0, .8fr)); gap: 10px; }
+.kpi { padding: 10px; display: grid; gap: 4px; align-content: start; }
+.kpi .v { font: 500 30px/1.05 var(--f-data); font-variant-numeric: tabular-nums; }
+.kpi .v small { font: 600 15px var(--f-display); color: var(--muted); margin-left: 4px; letter-spacing: .04em; }
+.kpi .sub { font-size: 12px; color: var(--muted); }
+.verdict .big { font: 700 28px/1.05 var(--f-display); text-transform: uppercase; letter-spacing: .03em; }
+.verdict.ok .big { color: var(--ok); }
+.verdict.warn { background: var(--warn); color: var(--warn-ink); border-color: var(--warn); }
+.verdict.alarm { background: repeating-linear-gradient(-45deg, var(--alarm) 0 14px, #c9271d 14px 28px); color: var(--alarm-ink); border-color: var(--alarm); }
+.verdict.warn .lbl, .verdict.alarm .lbl, .verdict.warn .sub, .verdict.alarm .sub { color: inherit; opacity: .9; }
+.timer .v.ok { color: var(--ok); }
+.timer .v.warn { color: var(--warn); }
+.window { position: relative; height: 16px; background: var(--well); border: 1px solid var(--bezel); margin-top: 6px; }
+.window .band { position: absolute; top: 0; bottom: 0; background: rgba(69,196,107,.22); border-left: 1px solid var(--ok); border-right: 1px solid var(--ok); }
+.window .fill { position: absolute; top: 3px; bottom: 3px; left: 0; background: var(--process-soft); width: 0; }
+.window .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+.window .last { position: absolute; top: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--signal); transform: translateX(-5px); }
+.scale { position: relative; height: 14px; font: 10.5px var(--f-data); color: var(--muted); }
+.scale span { position: absolute; transform: translateX(-50%); top: 2px; }
+
+/* Celda y proceso */
+.cell { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 10px; }
+.view { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 10px; }
+.view svg { width: 100%; height: auto; display: block; }
+svg text { font-family: var(--f-data); font-size: 10.5px; fill: var(--muted); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 12px; height: 9px; vertical-align: middle; margin-right: 4px; border: 1px solid var(--card-edge); background: var(--card); }
+.legend b { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); vertical-align: middle; margin-right: 4px; }
+.side { display: grid; gap: 10px; align-content: start; }
+.mini { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.mini svg { width: 100%; height: auto; display: block; }
+.seq { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.seq li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 6px; border-left: 3px solid transparent; font-size: 13px; color: var(--muted); }
+.seq li .n { font: 600 12px var(--f-data); text-align: center; border: 1px solid var(--line); border-radius: 2px; line-height: 18px; }
+.seq li.done { color: var(--ink); }
+.seq li.done .n { background: var(--process-soft); border-color: var(--process-soft); color: var(--ink); }
+.seq li.on { color: var(--signal-ink); background: var(--signal); border-left-color: var(--ink); font-weight: 600; }
+.seq li.on .n { border-color: var(--signal-ink); }
+.seq li .x { font: 11px var(--f-data); }
+.nodata { color: var(--muted); font-size: 12.5px; padding: 6px 2px 0; }
+
+/* Ciclo de la Pico + comunicación */
+.duo { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; }
+.cycle { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.step { padding: 6px 12px 6px 14px; background: var(--panel-2); border: 1px solid var(--line);
+  font: 700 14px var(--f-display); letter-spacing: .06em; color: var(--muted); clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%, 6px 50%); }
+.step:first-child { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); padding-left: 10px; }
+.step.done { color: var(--ink); }
+.step.on { background: var(--process); color: var(--well); border-color: var(--process); }
+.cycle .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+.step.side { clip-path: none; padding: 6px 10px; border-radius: 2px; }
+.step.side.on { background: var(--alarm); color: var(--alarm-ink); border-color: var(--alarm); }
+.cycle-meta { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
+.kv { display: grid; gap: 1px; }
+.kv .v { font: 500 16px var(--f-data); font-variant-numeric: tabular-nums; }
+.chain { display: flex; align-items: center; overflow-x: auto; padding-bottom: 2px; }
+.node { flex: none; border: 1px solid var(--bezel); background: var(--well); border-radius: 2px; padding: 5px 8px; text-align: center; min-width: 66px; }
+.node b { display: block; font: 700 14px var(--f-display); letter-spacing: .05em; }
+.node span { font-size: 10.5px; color: var(--muted); }
+.link { flex: 1 1 30px; min-width: 44px; display: grid; justify-items: center; gap: 2px; padding: 0 3px; }
+.link i { display: block; height: 3px; width: 100%; background: var(--line); }
+.link.ok i { background: var(--ok); box-shadow: 0 0 5px var(--ok); }
+.link.bad i { background: var(--alarm); }
+.link small { font: 10.5px var(--f-data); color: var(--muted); white-space: nowrap; }
+.link.bad small { color: var(--alarm); font-weight: 600; }
+
+/* Placas de eje */
+.axes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.axis.alarm { border-color: var(--alarm); }
+.axis.alarm > header { background: repeating-linear-gradient(-45deg, #4a1512 0 10px, #3a110f 10px 20px); }
+.axis > header h2 { font-size: 17px; }
+.axis > header h2 small { font: 500 12px var(--f-body); color: var(--muted); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+.pos { display: flex; align-items: baseline; gap: 6px; }
+.pos .v { font: 500 32px/1 var(--f-data); font-variant-numeric: tabular-nums; color: var(--process); }
+.pos .u { font: 600 15px var(--f-display); color: var(--muted); }
+.pos-sub { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 4px; }
+.pos-sub b { color: var(--ink); font-weight: 500; font-family: var(--f-data); }
+.range { position: relative; height: 16px; border-bottom: 1px solid var(--line); margin: 8px 0 14px; }
+.range .tick { position: absolute; bottom: -1px; width: 1px; height: 6px; background: var(--line); }
+.range .cur { position: absolute; bottom: 0; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 10px solid var(--process); transform: translateX(-6px); transition: left .4s; }
+.range .ends { position: absolute; top: 100%; left: 0; right: 0; display: flex; justify-content: space-between; font: 10.5px var(--f-data); color: var(--muted); }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 14px; }
+.metric .v { font: 500 19px var(--f-data); font-variant-numeric: tabular-nums; }
+.metric .v small { font: 500 11.5px var(--f-body); color: var(--muted); margin-left: 3px; }
+.v.warn, .val.warn { color: var(--warn-ink) !important; background: var(--warn); display: inline-block; padding: 0 4px; border-radius: 2px; }
+.v.alarm, .val.alarm { color: var(--alarm-ink) !important; background: var(--alarm); display: inline-block; padding: 0 4px; border-radius: 2px; }
+.bar { position: relative; height: 12px; background: var(--well); border: 1px solid var(--bezel); overflow: hidden; }
+.bar > b { position: absolute; inset: 1px auto 1px 0; background: var(--process-soft); width: 0; transition: width .3s; }
+.bar.warn > b { background: var(--warn); }
+.bar.alarm > b { background: var(--alarm); }
+.bar > u { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--warn); }
+.bar > u.hi { background: var(--alarm); }
+.spark { margin-top: 8px; }
+.spark svg { width: 100%; height: 50px; display: block; }
+.leds { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.led { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--bezel); background: var(--well); border-radius: 2px; padding: 3px 8px; font: 600 11.5px var(--f-display); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.led::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #262e35; }
+.led.on { color: var(--ink); }
+.led.on::before { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.led.bad { color: var(--alarm-ink); background: var(--alarm); border-color: var(--alarm); }
+.led.bad::before { background: var(--alarm-ink); }
+
+/* Sistema + alarmas */
+.bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
+.rows { display: grid; gap: 9px; }
+.row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 70px; gap: 10px; align-items: center; }
+.row .val { text-align: right; font: 500 14px var(--f-data); font-variant-numeric: tabular-nums; }
+.row .name { display: grid; }
+.row .name small { font-size: 10.5px; color: var(--muted); }
+.state-txt { font: 600 13px var(--f-display); letter-spacing: .06em; text-transform: uppercase; text-align: right; color: var(--ok); }
+.state-txt.alarm { color: var(--alarm); }
+.divider { height: 1px; background: var(--line); }
+.note { font-size: 12px; color: var(--muted); margin: 8px 0 0; max-width: 80ch; }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 600px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font: 600 12px var(--f-display); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); background: var(--panel-2); }
+td.t { font-family: var(--f-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prio { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; font: 700 13px var(--f-display); border-radius: 2px; }
+.prio.p1 { background: var(--alarm); color: var(--alarm-ink); }
+.prio.p2 { background: var(--warn); color: var(--warn-ink); clip-path: polygon(50% 0, 100% 100%, 0 100%); line-height: 26px; }
+tr.unack td:first-child .prio { animation: blink 1s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+tr.cleared td { color: var(--muted); }
+.empty { color: var(--muted); padding: 14px 8px; }
+
+/* Conexión */
+.conn { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; align-items: end; }
+.conn label { display: grid; gap: 4px; }
+input { font: 14px var(--f-data); color: var(--ink); background: var(--well); border: 1px solid var(--bezel); border-radius: 2px; padding: 7px 8px; width: 100%; min-width: 0; }
+.err { color: var(--alarm); font-weight: 600; }
+
+.stale .live { color: var(--stale) !important; }
+@media (max-width: 1100px) {
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpis .verdict, .kpis .timer { grid-column: 1 / -1; }
+  .cell, .duo, .bottom { grid-template-columns: minmax(0, 1fr); }
+  .axes { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .kpis > :last-child { grid-column: 1 / -1; }
+  .kpi .v { font-size: 24px; }
+  .view { grid-template-columns: minmax(0, 1fr) 58px; }
+  .mini { grid-template-columns: minmax(0, 1fr); }
+  .row { grid-template-columns: 84px minmax(0, 1fr) 64px; }
+  .station .badge { font-size: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  tr.unack td:first-child .prio { animation: none; outline: 2px solid var(--ink); }
+  .bar > b, .range .cur { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="hazard"></div>
+<div class="wrap" id="app">
+  <div class="station">
+    <div class="id">
+      <span class="badge">E1</span>
+      <div>
+        <h1>Estación 1 · Pick &amp; Place de PCB</h1>
+        <small>Robot SCARA RRP · Grupo 7-G · Pico + STM32F030 + FC41D</small>
+      </div>
+    </div>
+    <span class="chip" id="chipConn"><span class="dot"></span><span>Sin conexión</span></span>
+    <span class="chip"><span class="lbl" style="color:inherit">Dato</span><span class="num" id="age">—</span></span>
+    <span class="chip num" id="clock">--:--:--</span>
+    <div class="actions">
+      <button type="button" id="btnFault" title="Solo en modo demo">Simular falla</button>
+      <button type="button" id="btnConnToggle">Conexión</button>
+    </div>
+  </div>
+
+  <section class="panel" id="connPanel" hidden>
+    <header><h2>Conexión al broker MQTT</h2><span class="lbl" id="connState"></span></header>
+    <div class="body">
+      <form class="conn" id="connForm">
+        <label><span class="lbl">Broker (WebSocket)</span><input id="inUrl" value="wss://broker.hivemq.com:8884/mqtt" autocomplete="off"></label>
+        <label><span class="lbl">Prefijo de topics</span><input id="inPrefix" value="scara" autocomplete="off"></label>
+        <label><span class="lbl">Usuario (opcional)</span><input id="inUser" autocomplete="off"></label>
+        <label><span class="lbl">Clave (opcional)</span><input id="inPass" type="password" autocomplete="off"></label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <button type="submit" class="primary">Conectar</button>
+          <button type="button" id="btnDemo">Modo demo</button>
+        </div>
+      </form>
+      <p class="note">La página escucha <span class="num">&lt;prefijo&gt;/estado</span> (cada 500 ms) y <span class="num">&lt;prefijo&gt;/evento</span> (fallas), formato v1. El prefijo tiene que ser el mismo de <span class="num">stm32/inc/wifi_config.h</span>; en el broker público conviene uno único, por ejemplo <span class="num">scara-simon</span>. El panel de la estación usa el campo <span class="num">est1</span>. Es una página de solo lectura: no manda comandos al robot.</p>
+    </div>
+  </section>
+
+  <div class="kpis">
+    <section class="panel kpi verdict" id="verdict">
+      <span class="lbl">Estado de la estación</span>
+      <span class="big" id="verdictTxt">Esperando datos</span>
+      <span class="sub" id="verdictSub"></span>
+    </section>
+    <section class="panel kpi timer">
+      <div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline; flex-wrap:wrap">
+        <span class="lbl">Tiempo de ciclo · ventana 20–50 s</span><span class="tag" id="tWin">—</span>
+      </div>
+      <span class="v live" id="tCiclo">—</span>
+      <div class="window"><span class="band" style="left:33.33%; width:50%"></span><span class="fill" id="winFill"></span><span class="last" id="winLast" hidden></span><span class="mark" id="winMark" hidden></span></div>
+      <div class="scale"><span style="left:0%; transform:none">0</span><span style="left:33.33%">20</span><span style="left:83.33%">50</span><span style="left:100%; transform:translateX(-100%)">60 s</span></div>
+    </section>
+    <section class="panel kpi">
+      <span class="lbl">Tarjeta</span>
+      <span class="v live" id="kTarjeta">—</span>
+      <span class="sub" id="kGiro">—</span>
+    </section>
+    <section class="panel kpi">
+      <span class="lbl">Último ciclo</span>
+      <span class="v live" id="kUltimo">—</span>
+      <span class="sub" id="kUltimoSub">—</span>
+    </section>
+    <section class="panel kpi">
+      <span class="lbl">Ciclos completos</span>
+      <span class="v live" id="kCiclos">—</span>
+      <span class="sub" id="kCiclosSub">contados por el robot</span>
+    </section>
+  </div>
+
+  <div class="cell">
+    <section class="panel">
+      <header><h2>Celda de trabajo · vista superior</h2><span class="tag">ST1-ROB · R1 · R2 · P</span></header>
+      <div class="body">
+        <div class="view">
+          <div>
+            <svg id="arm" viewBox="0 0 400 290" role="img" aria-label="Brazo, pila y bandeja vistos desde arriba"></svg>
+            <div class="legend"><span><i></i>Tarjeta virgen</span><span><b></b>Agujero H1</span><span>Esquema, no a escala real</span></div>
+          </div>
+          <svg id="pGauge" viewBox="0 0 76 290" role="img" aria-label="Altura del eje P"></svg>
+        </div>
+      </div>
+    </section>
+
+    <div class="side">
+      <section class="panel">
+        <header><h2>Secuencia por tarjeta</h2><span class="tag" id="seqTag">—</span></header>
+        <div class="body">
+          <ol class="seq" id="seq"></ol>
+          <div class="nodata" id="seqNo" hidden>El firmware todavía no envía el campo <span class="num">est1</span> con la tarjeta y la fase. El resto de la página funciona igual.</div>
+        </div>
+      </section>
+      <div class="mini">
+        <section class="panel">
+          <header><h2>Pila en cruz</h2><span class="tag">0° / 90°</span></header>
+          <div class="body"><svg id="pila" viewBox="0 0 160 150" role="img" aria-label="Pila de tarjetas con orientación alternada"></svg></div>
+        </section>
+        <section class="panel">
+          <header><h2>Bandeja</h2><span class="tag">H1 abajo izq.</span></header>
+          <div class="body"><svg id="bandeja" viewBox="0 0 160 150" role="img" aria-label="Bandeja de transporte con 4 posiciones"></svg></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="duo">
+    <section class="panel">
+      <header><h2>Ciclo de la Pico</h2><span class="tag" id="cicloTxt">—</span></header>
+      <div class="body">
+        <div class="cycle" id="cycle">
+          <div class="step" data-s="ARRANQUE">ARRANQUE</div>
+          <div class="step" data-s="ESPERA">ESPERA</div>
+          <div class="step" data-s="HOME_R1">HOME R1</div>
+          <div class="step" data-s="HOME_R2">HOME R2</div>
+          <div class="step" data-s="HOME_P">HOME P</div>
+          <div class="step" data-s="LISTO">LISTO</div>
+          <div class="step" data-s="QUIETO">QUIETO</div>
+          <span class="sep"></span>
+          <div class="step side" data-s="FALLA">FALLA</div>
+          <div class="step side" data-s="SIN_PICO">SIN PICO</div>
+        </div>
+        <div class="cycle-meta">
+          <div class="kv"><span class="lbl">En este estado</span><span class="v live" id="enEstado">—</span></div>
+          <div class="kv"><span class="lbl">Lazo de control</span><span class="v live" id="loopRate">—</span></div>
+          <div class="kv"><span class="lbl">Contador del lazo</span><span class="v live" id="loopN">—</span></div>
+          <div class="kv"><span class="lbl">STM32 encendido</span><span class="v live" id="up">—</span></div>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <header><h2>Comunicación</h2><span class="tag" id="fmtTag"></span></header>
+      <div class="body">
+        <div class="chain">
+          <div class="node"><b>PICO</b><span>control</span></div>
+          <div class="link" id="lkI2C"><small>I2C</small><i></i><small id="lkI2Ct">—</small></div>
+          <div class="node"><b>STM32</b><span>protección</span></div>
+          <div class="link" id="lkUart"><small>Wi-Fi</small><i></i><small id="lkUartt">—</small></div>
+          <div class="node"><b>FC41D</b><span>MQTT</span></div>
+          <div class="link" id="lkWeb"><small>Broker</small><i></i><small id="lkWebt">—</small></div>
+          <div class="node"><b>HMI</b><span>esta página</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="axes" id="axes"></div>
+
+  <div class="bottom">
+    <section class="panel">
+      <header><h2>Sistema</h2><span class="tag">Chips y alimentación</span></header>
+      <div class="body">
+        <div class="rows">
+          <div class="row"><span class="name"><span class="lbl">Pico</span><small>RP2040 · interno</small></span><div class="bar" id="bTpico"><b></b><u style="left:70%"></u><u class="hi" style="left:85%"></u></div><span class="val live" id="vTpico">—</span></div>
+          <div class="row"><span class="name"><span class="lbl">STM32</span><small>F030 · interno</small></span><div class="bar" id="bTstm"><b></b><u style="left:70%"></u><u class="hi" style="left:85%"></u></div><span class="val live" id="vTstm">—</span></div>
+          <div class="row"><span class="name"><span class="lbl">3.3 V</span><small>VDDA del STM32</small></span><div class="bar" id="bVdda"><b></b><u style="left:77.5%"></u><u class="hi" style="left:87.5%"></u></div><span class="val live" id="vVdda">—</span></div>
+          <div class="divider"></div>
+          <div class="row"><span class="name"><span class="lbl">Drivers M1</span><small>IFX007T ×2</small></span><span class="tag">sin sensor de temperatura; avisa por IS</span><span class="state-txt live" id="drvR1">—</span></div>
+          <div class="row"><span class="name"><span class="lbl">Drivers M2</span><small>IFX007T ×2</small></span><span></span><span class="state-txt live" id="drvR2">—</span></div>
+          <div class="row"><span class="name"><span class="lbl">Drivers M3</span><small>IFX007T ×2</small></span><span></span><span class="state-txt live" id="drvP">—</span></div>
+        </div>
+        <p class="note">Temperatura 0–100 °C, aviso a 70 °C y alarma a 85 °C. 3.3 V en escala 0–4 V, aviso fuera de 3.1–3.5 V.</p>
+      </div>
+    </section>
+    <section class="panel">
+      <header><h2>Alarmas</h2><div style="display:flex; gap:8px; align-items:center"><span class="lbl" id="almCount"></span><button type="button" id="btnAckAll">Reconocer todas</button></div></header>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th style="width:44px">Prio</th><th>Hora</th><th>Eje</th><th>Descripción</th><th>Valor</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="almBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js" defer></script>
+<script>
+(() => {
+  "use strict";
+  // ---------- Configuración (ajustar a la mecánica real) ----------
+  const CFG = {
+    ejes: {
+      R1: { nombre: "Hombro",     motor: "M1", unidad: "°",  min: -120, max: 120 },
+      R2: { nombre: "Codo",       motor: "M2", unidad: "°",  min: -140, max: 140 },
+      P:  { nombre: "Prismático", motor: "M3", unidad: "mm", min: 0,    max: 100 },
+    },
+    PILA: [0, 90, 0, 90],          // orientación de las tarjetas 1..4 en la pila (1 = la de arriba)
+    T_MIN: 20, T_MAX: 50, T_ESCALA: 60,   // s: ventana del ciclo de la estación
+    I_SOST: 3.0, I_PICO: 4.5, I_MAX: 5.5,
+    T_AVISO: 70, T_ALARMA: 85,
+    V_MOTOR: 12, VDDA_MIN: 3.1, VDDA_MAX: 3.5,
+    PERIODO_MS: 500, STALE_MS: 2000, HIST: 120,
+  };
+  const EJES = Object.keys(CFG.ejes);
+  const ORDEN = ["ARRANQUE", "ESPERA", "HOME_R1", "HOME_R2", "HOME_P", "LISTO", "QUIETO"];
+  const CICLO_TXT = {
+    ARRANQUE: "Inicializando", ESPERA: "Esperando el Enter para empezar el home",
+    HOME_R1: "Home de R1", HOME_R2: "Home de R2", HOME_P: "Home de P",
+    LISTO: "En control, ejecutando la estación", QUIETO: "En control, sin objetivos nuevos",
+    FALLA: "Un home falló o el STM32 cortó un eje: hay que reiniciar", SIN_PICO: "El STM32 no recibe datos de la Pico",
+  };
+  // Fases de cada tarjeta (campo est1.fase)
+  const FASES = [
+    ["PILA", "Ir a la pila"], ["BAJAR_PILA", "Bajar P hasta la tarjeta"], ["VACIO", "Activar ventosa"],
+    ["SUBIR_PILA", "Subir con la tarjeta"], ["CORREGIR", "Corregir orientación"], ["BANDEJA", "Ir a su posición en la bandeja"],
+    ["BAJAR_BANDEJA", "Bajar P a la bandeja"], ["SOLTAR", "Soltar la tarjeta"], ["SUBIR_BANDEJA", "Subir y liberar"],
+  ];
+  const EST = { D: "Deshabilitado", H: "Haciendo home", R: "Listo", F: "Falla" };
+  const FALLAS = {
+    sostenida: { txt: "Sobrecorriente sostenida (> 3 A por 500 ms)", prio: 2 },
+    pico:      { txt: "Sobrecorriente de pico (> 4.5 A por 20 ms)", prio: 1 },
+    driver:    { txt: "Falla del driver IFX007T: sobretemperatura o corto", prio: 1 },
+    enlace:    { txt: "El STM32 perdió la Pico: EN apagado", prio: 1 },
+  };
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+  const aGrados = (e, pos) => (e === "P" ? pos : (pos * 180) / Math.PI); // R1/R2 llegan en rad
+  const giroDe = (k) => (k >= 1 && k <= 4 ? -CFG.PILA[k - 1] : 0);
+
+  // ---------- Estado ----------
+  const S = {
+    modo: "off", mqttOk: false,
+    last: null, lastAt: 0, prevLoop: null, loopRate: null, loopQuieto: 0,
+    hist: Object.fromEntries(EJES.map((e) => [e, []])),
+    ciclo: null, cicloDesde: 0, alarmas: [], seq: 0,
+    tiempos: [], ultimoVisto: null, est: null,
+    view: Object.fromEntries(EJES.map((e) => [e, { pos: 0 }])),
+  };
+
+  // ---------- Construcción ----------
+  $("seq").innerHTML = FASES.map(([k, t], i) => `<li data-f="${k}"><span class="n">${i + 1}</span><span>${t}</span><span class="x"></span></li>`).join("");
+  $("axes").innerHTML = EJES.map((e) => {
+    const c = CFG.ejes[e];
+    const ticks = [0, 25, 50, 75, 100].map((p) => `<span class="tick" style="left:${p}%"></span>`).join("");
+    return `<section class="panel axis" id="ax${e}">
+      <header><h2>${e}<small>${c.nombre} · ${c.motor}</small></h2><span class="chip" id="st${e}"><span class="dot"></span><span>—</span></span></header>
+      <div class="body">
+        <div class="well">
+          <div class="pos"><span class="v live" id="pos${e}">—</span><span class="u">${c.unidad}</span></div>
+          <div class="pos-sub"><span>Pico <b class="live" id="est${e}">—</b></span>${e === "P" ? "" : `<span>Crudo <b class="live" id="raw${e}">—</b></span>`}<span class="tag">ST1-${c.motor}</span></div>
+        </div>
+        <div class="range">${ticks}<span class="cur" id="rc${e}"></span>
+          <div class="ends"><span>${c.min}</span><span>${c.max} ${c.unidad}</span></div></div>
+        <div class="metrics">
+          <div class="metric"><span class="lbl">Corriente</span><div class="v live" id="i${e}">—</div></div>
+          <div class="metric"><span class="lbl">Voltaje al motor</span><div class="v live" id="v${e}">—</div></div>
+        </div>
+        <div class="bar" id="ib${e}" style="margin-top:8px"><b></b><u style="left:${(CFG.I_SOST / CFG.I_MAX) * 100}%"></u><u class="hi" style="left:${(CFG.I_PICO / CFG.I_MAX) * 100}%"></u></div>
+        <div class="spark"><svg viewBox="0 0 300 50" preserveAspectRatio="none" id="sp${e}"></svg></div>
+        <div class="leds">
+          <span class="led" id="en${e}">EN</span><span class="led" id="lh${e}">Lím. home</span>
+          <span class="led" id="le${e}">Lím. fin</span><span class="led" id="fl${e}">Sin falla</span>
+        </div>
+      </div>
+    </section>`;
+  }).join("");
+
+  // ---------- Utilidades ----------
+  const fmt = (v, d = 1) => (v == null || Number.isNaN(+v) ? "—" : (+v).toFixed(d));
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const pct = (v, a, b) => clamp(((v - a) / (b - a)) * 100, 0, 100);
+  const hhmmss = (t) => new Date(t).toLocaleTimeString("es", { hour12: false });
+  const dur = (ms) => { const s = Math.floor(ms / 1000); return s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`; };
+  function setCls(el, cls, on) { el.classList.toggle(cls, !!on); }
+  function level(el, v, warnAt, alarmAt) { setCls(el, "warn", v >= warnAt && v < alarmAt); setCls(el, "alarm", v >= alarmAt); }
+  function chip(el, kind, txt) { el.className = "chip " + (kind || ""); el.lastElementChild.textContent = txt; }
+  const ejeDe = (d, e) => (Array.isArray(d.ejes) ? d.ejes.find((a) => a && a.n === e) : null);
+  const enVentana = (t) => t >= CFG.T_MIN && t <= CFG.T_MAX;
+  const faseIdx = (f) => FASES.findIndex((x) => x[0] === f);
+
+  // ---------- Alarmas ----------
+  function alarma(clave, eje, tipo, valor, prio) {
+    const viva = S.alarmas.find((a) => a.clave === clave && a.estado !== "normal");
+    if (viva) { if (valor != null) viva.valor = valor; return; }
+    S.alarmas.unshift({ id: ++S.seq, clave, eje, tipo, valor, prio, t: Date.now(), ack: false, estado: "activa" });
+    S.alarmas = S.alarmas.slice(0, 50);
+  }
+  function normalizar(prefijo) { S.alarmas.forEach((a) => { if (a.clave.startsWith(prefijo) && a.estado === "activa") a.estado = "normal"; }); }
+  function renderAlarmas() {
+    const body = $("almBody");
+    const activas = S.alarmas.filter((a) => a.estado === "activa").length;
+    $("almCount").textContent = `${activas} activas · ${S.alarmas.filter((a) => !a.ack).length} sin reconocer`;
+    if (!S.alarmas.length) { body.innerHTML = `<tr><td colspan="7" class="empty">No hay alarmas registradas desde que se abrió la página.</td></tr>`; return; }
+    body.innerHTML = S.alarmas.map((a) => `<tr class="${a.ack ? "" : "unack"} ${a.estado === "normal" ? "cleared" : ""}">
+      <td><span class="prio p${a.prio}">${a.prio}</span></td><td class="t">${hhmmss(a.t)}</td><td>${a.eje}</td><td>${a.tipo}</td>
+      <td class="t">${a.valor ?? ""}</td><td>${a.estado === "activa" ? "Activa" : "Normalizada"}${a.ack ? " · reconocida" : ""}</td>
+      <td>${a.ack ? "" : `<button type="button" data-ack="${a.id}">Reconocer</button>`}</td></tr>`).join("");
+  }
+  $("almBody").addEventListener("click", (ev) => {
+    const a = S.alarmas.find((x) => x.id === +ev.target.dataset.ack); if (!a) return;
+    a.ack = true; renderAlarmas(); renderResumen();
+  });
+  $("btnAckAll").addEventListener("click", () => { S.alarmas.forEach((a) => (a.ack = true)); renderAlarmas(); renderResumen(); });
+
+  // ---------- Entrada de datos: scara/estado y scara/evento ----------
+  function onEstado(d) {
+    if (!d || typeof d !== "object" || !Array.isArray(d.ejes)) return;
+    const now = Date.now();
+    if (S.prevLoop && typeof d.loop === "number") {
+      const dt = (now - S.prevLoop.t) / 1000, dn = d.loop - S.prevLoop.n;
+      if (dt > 0.2 && dn >= 0) S.loopRate = dn / dt;
+      S.loopQuieto = dn === 0 ? S.loopQuieto + 1 : 0;
+    }
+    S.prevLoop = typeof d.loop === "number" ? { t: now, n: d.loop } : null;
+    S.last = d; S.lastAt = now;
+    if (d.ciclo !== S.ciclo) { S.ciclo = d.ciclo; S.cicloDesde = now; }
+    EJES.forEach((e) => {
+      const a = ejeDe(d, e); if (!a) return;
+      const h = S.hist[e]; h.push(+a.i || 0); if (h.length > CFG.HIST) h.shift();
+      const f = a.falla || "ninguna";
+      if (FALLAS[f]) alarma(`${e}:${f}`, e, FALLAS[f].txt, a.i != null ? `${fmt(a.i, 2)} A` : null, FALLAS[f].prio);
+      else normalizar(`${e}:`);
+    });
+    const t = d.temp || {};
+    [["pico", "Pico"], ["stm32", "STM32"]].forEach(([k, n]) => {
+      const v = t[k]; if (v == null) return;
+      if (v >= CFG.T_ALARMA) alarma(`T:${k}`, "—", `Temperatura alta en ${n}`, `${fmt(v)} °C`, 1);
+      else if (v >= CFG.T_AVISO) alarma(`T:${k}`, "—", `Temperatura elevada en ${n}`, `${fmt(v)} °C`, 2);
+      else normalizar(`T:${k}`);
+    });
+    if (d.pico_ok === false || d.ciclo === "SIN_PICO") alarma("pico", "todos", "La Pico no responde por I2C", null, 1); else normalizar("pico");
+    const enControl = /^(HOME_|LISTO|QUIETO)/.test(d.ciclo || "");
+    if (enControl && d.pico_ok !== false && S.loopQuieto >= 3) alarma("loop", "todos", "El lazo de control de la Pico dejó de avanzar", `loop ${d.loop}`, 1); else normalizar("loop");
+    if (d.vdda != null && (d.vdda < CFG.VDDA_MIN || d.vdda > CFG.VDDA_MAX)) alarma("vdda", "—", "Alimentación de 3.3 V fuera de rango", `${fmt(d.vdda, 2)} V`, 2); else normalizar("vdda");
+    // Estación: tiempo del ciclo terminado dentro de la ventana
+    const st = d.est1;
+    if (st && typeof st.t_ultimo === "number" && st.t_ultimo > 0 && st.t_ultimo !== S.ultimoVisto) {
+      S.tiempos.push(st.t_ultimo); if (S.tiempos.length > 50) S.tiempos.shift();
+      if (!enVentana(st.t_ultimo)) alarma("tciclo", "E1", `Ciclo fuera de la ventana ${CFG.T_MIN}–${CFG.T_MAX} s`, `${fmt(st.t_ultimo)} s`, 2);
+      else normalizar("tciclo");
+      S.ultimoVisto = st.t_ultimo;
+    }
+    if (st && typeof st.t_ciclo === "number" && st.t_ciclo > CFG.T_MAX && faseIdx(st.fase) >= 0)
+      alarma("tciclo", "E1", `Ciclo pasado de ${CFG.T_MAX} s`, `${fmt(st.t_ciclo)} s`, 2);
+    render();
+  }
+  function onEvento(ev) {
+    if (!ev || !ev.eje || !ev.falla) return;
+    if (ev.falla === "ninguna") normalizar(`${ev.eje}:`);
+    else { const info = FALLAS[ev.falla] || { txt: `Falla: ${ev.falla}`, prio: 1 };
+      alarma(`${ev.eje}:${ev.falla}`, ev.eje, info.txt, ev.i != null ? `${fmt(ev.i, 2)} A` : null, info.prio); }
+    renderAlarmas(); renderResumen();
+  }
+
+  // ---------- Render ----------
+  function render() {
+    const d = S.last; if (!d) return;
+    const cur = ORDEN.indexOf(d.ciclo);
+    document.querySelectorAll("#cycle .step").forEach((el) => {
+      const i = ORDEN.indexOf(el.dataset.s);
+      setCls(el, "on", el.dataset.s === d.ciclo); setCls(el, "done", cur >= 0 && i >= 0 && i < cur);
+    });
+    $("cicloTxt").textContent = CICLO_TXT[d.ciclo] || d.ciclo || "—";
+    $("loopRate").textContent = S.loopRate == null ? "—" : S.loopQuieto >= 3 ? "detenido" : `${fmt(S.loopRate, 0)} ciclos/s`;
+    $("loopN").textContent = d.loop == null ? "—" : d.loop.toLocaleString("es");
+    $("up").textContent = d.up == null ? "—" : dur(d.up * 1000);
+    $("fmtTag").textContent = d.v != null ? `formato v${d.v}` : "";
+    const t = d.temp || {};
+    [["pico", "Tpico"], ["stm32", "Tstm"]].forEach(([k, id]) => {
+      const v = t[k], bar = $("b" + id), val = $("v" + id);
+      bar.firstElementChild.style.width = v == null ? "0" : pct(v, 0, 100) + "%";
+      val.textContent = v == null ? "—" : `${fmt(v)} °C`;
+      level(bar, v ?? 0, CFG.T_AVISO, CFG.T_ALARMA); level(val, v ?? 0, CFG.T_AVISO, CFG.T_ALARMA);
+    });
+    const vb = $("bVdda"), vv = $("vVdda"), malV = d.vdda != null && (d.vdda < CFG.VDDA_MIN || d.vdda > CFG.VDDA_MAX);
+    vb.firstElementChild.style.width = d.vdda == null ? "0" : pct(d.vdda, 0, 4) + "%";
+    vv.textContent = d.vdda == null ? "—" : `${fmt(d.vdda, 2)} V`;
+    setCls(vb, "warn", malV); setCls(vv, "warn", malV);
+    EJES.forEach((e) => {
+      const f = ejeDe(d, e)?.falla, el = $("drv" + e);
+      el.textContent = f === "driver" ? "Falla" : f == null ? "—" : "OK"; setCls(el, "alarm", f === "driver");
+    });
+    EJES.forEach((e) => {
+      const a = ejeDe(d, e), c = CFG.ejes[e]; if (!a) return;
+      const f = a.falla || "ninguna", falla = f !== "ninguna", i = +a.i || 0, pos = aGrados(e, +a.pos || 0);
+      $("pos" + e).textContent = fmt(pos, 1);
+      if (e !== "P") $("raw" + e).textContent = `${fmt(a.pos, 3)} rad`;
+      $("est" + e).textContent = EST[a.est] || a.est || "—";
+      $("rc" + e).style.left = pct(pos, c.min, c.max) + "%";
+      const iv = $("i" + e); iv.innerHTML = `${fmt(i, 2)}<small>A</small>`; level(iv, i, CFG.I_SOST, CFG.I_PICO);
+      const ib = $("ib" + e); ib.firstElementChild.style.width = pct(i, 0, CFG.I_MAX) + "%"; level(ib, i, CFG.I_SOST, CFG.I_PICO);
+      const u = +a.u || 0;
+      $("v" + e).innerHTML = `${fmt(Math.abs(u), 1)}<small>V · ${u > 0.05 ? "sentido +" : u < -0.05 ? "sentido −" : "parado"}</small>`;
+      sparkline($("sp" + e), S.hist[e]);
+      setCls($("en" + e), "on", a.en); $("en" + e).textContent = a.en ? "EN activo" : "EN apagado";
+      const lim = a.lim || [];
+      setCls($("lh" + e), "on", lim[0]); setCls($("le" + e), "on", lim[1]);
+      const fl = $("fl" + e); setCls(fl, "bad", falla); fl.textContent = falla ? "Falla: " + f : "Sin falla";
+      const mal = falla || a.est === "F"; setCls($("ax" + e), "alarm", mal);
+      chip($("st" + e), mal ? "alarm" : a.en ? "ok" : "", mal ? "Falla" : !a.en ? "EN apagado" : Math.abs(u) > 0.3 ? "Moviendo" : (EST[a.est] || "—"));
+      S.view[e].tpos = pos;
+    });
+    renderEstacion(d.est1);
+    renderAlarmas(); renderResumen(); tick();
+  }
+
+  function renderEstacion(st) {
+    const has = !!(st && typeof st === "object");
+    $("seqNo").hidden = has; $("seq").hidden = !has;
+    const k = has ? st.tarjeta : null, fase = has ? st.fase : null, fi = faseIdx(fase);
+    document.querySelectorAll("#seq li").forEach((li, i) => {
+      setCls(li, "on", i === fi); setCls(li, "done", fi >= 0 && i < fi);
+      li.querySelector(".x").textContent = li.dataset.f === "CORREGIR" && k ? (giroDe(k) === 0 ? "0°" : `${giroDe(k)}°`) : "";
+    });
+    $("seqTag").textContent = !has ? "sin datos" : fase === "ESPERA_PILA" ? "esperando pila nueva" : k ? `tarjeta ${k} de 4` : "—";
+    $("kTarjeta").innerHTML = has && k ? `${k}<small>/ 4</small>` : "—";
+    $("kGiro").textContent = has && k ? `En pila a ${CFG.PILA[k - 1]}° · corrección ${giroDe(k) === 0 ? "ninguna" : giroDe(k) + "°"}` : has && fase === "ESPERA_PILA" ? "Esperando la pila siguiente" : "—";
+    const tc = has && typeof st.t_ciclo === "number" ? st.t_ciclo : null, tu = has && typeof st.t_ultimo === "number" && st.t_ultimo > 0 ? st.t_ultimo : null;
+    const corriendo = fi >= 0;
+    const tv = $("tCiclo");
+    tv.innerHTML = tc == null ? "—" : `${fmt(tc)}<small>s</small>`;
+    tv.className = "v live " + (tc == null || !corriendo ? "" : tc > CFG.T_MAX ? "warn" : tc >= CFG.T_MIN ? "ok" : "");
+    $("winFill").style.width = tc == null ? "0" : pct(tc, 0, CFG.T_ESCALA) + "%";
+    const mk = $("winMark"); mk.hidden = tc == null; if (tc != null) mk.style.left = pct(tc, 0, CFG.T_ESCALA) + "%";
+    const lt = $("winLast"); lt.hidden = tu == null; if (tu != null) lt.style.left = pct(tu, 0, CFG.T_ESCALA) + "%";
+    $("tWin").textContent = !has ? "sin datos de la estación" : corriendo ? "ciclo en curso" : "entre ciclos · ▼ último";
+    $("kUltimo").innerHTML = tu == null ? "—" : `${fmt(tu)}<small>s</small>`;
+    $("kUltimo").className = "v live " + (tu == null ? "" : enVentana(tu) ? "" : "warn");
+    $("kUltimoSub").textContent = tu == null ? "sin ciclos terminados" : enVentana(tu) ? `dentro de ${CFG.T_MIN}–${CFG.T_MAX} s` : `fuera de ${CFG.T_MIN}–${CFG.T_MAX} s`;
+    const n = has && typeof st.ciclos === "number" ? st.ciclos : null;
+    $("kCiclos").textContent = n == null ? "—" : n;
+    const ok = S.tiempos.filter(enVentana).length;
+    $("kCiclosSub").textContent = S.tiempos.length ? `${ok} de ${S.tiempos.length} en ventana · prom. ${fmt(S.tiempos.reduce((s, x) => s + x, 0) / S.tiempos.length)} s` : "contados por el robot";
+    S.est = has ? st : null;
+    drawPila(S.est); drawBandeja(S.est);
+  }
+
+  function sparkline(svg, h) {
+    const W = 300, H = 50, max = CFG.I_MAX, n = CFG.HIST;
+    const y = (v) => H - 2 - (clamp(v, 0, max) / max) * (H - 4);
+    const x = (i) => (i / (n - 1)) * W, off = n - h.length;
+    const pts = h.map((v, i) => `${x(i + off).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    svg.innerHTML = `<rect x="0" y="0" width="${W}" height="${H}" fill="var(--well)"/>
+      <line x1="0" x2="${W}" y1="${y(CFG.I_SOST)}" y2="${y(CFG.I_SOST)}" stroke="var(--warn)" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>
+      <line x1="0" x2="${W}" y1="${y(CFG.I_PICO)}" y2="${y(CFG.I_PICO)}" stroke="var(--alarm)" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>
+      ${h.length ? `<polygon points="${x(off)},${H} ${pts} ${x(n - 1)},${H}" fill="var(--process-soft)" opacity=".5"/>
+      <polyline points="${pts}" fill="none" stroke="var(--process)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+      <circle cx="${x(n - 1)}" cy="${y(h[h.length - 1])}" r="3" fill="var(--process)"/>` : ""}`;
+  }
+
+  function renderResumen() {
+    const now = Date.now(), d = S.last, age = now - S.lastAt, stale = !d || age > CFG.STALE_MS;
+    setCls($("app"), "stale", stale && !!d);
+    $("age").textContent = d ? (age < 1500 ? "en vivo" : `hace ${dur(age)}`) : "—";
+    $("enEstado").textContent = d ? dur(now - S.cicloDesde) : "—";
+    const cc = $("chipConn");
+    if (S.modo === "demo") chip(cc, "warn", "Demo · datos simulados");
+    else if (S.modo === "mqtt") chip(cc, S.mqttOk ? "ok" : "alarm", S.mqttOk ? "MQTT conectado" : "MQTT desconectado");
+    else chip(cc, "", "Sin conexión");
+    $("btnFault").hidden = S.modo !== "demo";
+    const lk = (id, ok, txt) => { const el = $(id); setCls(el, "ok", ok === true); setCls(el, "bad", ok === false); $(id + "t").textContent = txt; };
+    if (!d) { lk("lkI2C", null, "—"); lk("lkUart", null, "—"); }
+    else {
+      const picoOk = d.pico_ok !== false && d.ciclo !== "SIN_PICO";
+      lk("lkI2C", stale ? null : picoOk, stale ? "?" : picoOk ? "latido OK" : "sin latido");
+      lk("lkUart", !stale, stale ? `sin datos ${dur(age)}` : "2 datos/s");
+    }
+    lk("lkWeb", S.modo === "demo" ? true : S.modo === "mqtt" ? S.mqttOk : null, S.modo === "demo" ? "simulado" : S.modo === "mqtt" ? (S.mqttOk ? "conectado" : "sin conexión") : "—");
+    const v = $("verdict"), activas = S.alarmas.filter((a) => a.estado === "activa"), st = d && d.est1;
+    let cls = "ok", big = "En operación", sub = "Comunicación, temperaturas y corrientes dentro de rango.";
+    if (!d) { cls = ""; big = "Esperando datos"; sub = S.modo === "mqtt" ? "Conectado al broker, todavía no llega scara/estado. Revisa el prefijo." : "Conéctate al broker o usa el modo demo."; }
+    else if (stale) { cls = "warn"; big = "Sin datos"; sub = `El último dato llegó hace ${dur(age)}. Revisa el FC41D y el Wi-Fi.`; }
+    else if (activas.some((a) => a.prio === 1) || d.ciclo === "FALLA" || d.ciclo === "SIN_PICO") { cls = "alarm"; big = "Estación en falla"; sub = activas[0] ? `${activas[0].eje}: ${activas[0].tipo}` : CICLO_TXT[d.ciclo]; }
+    else if (activas.length) { cls = "warn"; big = "Aviso activo"; sub = `${activas[0].eje}: ${activas[0].tipo}`; }
+    else if (d.ciclo === "ESPERA") { big = "Lista para el home"; sub = "La Pico espera el Enter en el PC para empezar."; }
+    else if (/^(HOME_|ARRANQUE)/.test(d.ciclo)) { big = "Preparando"; sub = CICLO_TXT[d.ciclo]; }
+    else if (st && st.fase === "ESPERA_PILA") { big = "Esperando pila"; sub = st.ciclos ? "Ciclo terminado: las 4 tarjetas están en la bandeja." : "Coloca la pila de 4 tarjetas en cruz."; }
+    v.className = "panel kpi verdict " + cls; $("verdictTxt").textContent = big; $("verdictSub").textContent = sub;
+  }
+
+  // ---------- Celda: brazo, pila y bandeja ----------
+  const L1 = 115, L2 = 95, BX = 200, BY = 262;
+  const POS_PILA = [86, 128], POS_BANDEJA = [292, 126], SLOT = [46, 36];
+  const slotXY = (k) => { const col = (k - 1) % 2, row = Math.floor((k - 1) / 2); return [POS_BANDEJA[0] + (col - 0.5) * SLOT[0], POS_BANDEJA[1] + (row - 0.5) * SLOT[1]]; };
+  const rad = (g) => (g * Math.PI) / 180;
+  const dir = (a) => [-Math.sin(a), -Math.cos(a)];
+  function armPts(t1, t2) {
+    const a1 = rad(t1), a2 = rad(t1 + t2), [d1x, d1y] = dir(a1), [d2x, d2y] = dir(a2);
+    const j = [BX + L1 * d1x, BY + L1 * d1y];
+    return [[BX, BY], j, [j[0] + L2 * d2x, j[1] + L2 * d2y]];
+  }
+  // Estado de las tarjetas a partir de est1: cuántas salieron de la pila, cuántas están en la bandeja, si hay una en la ventosa
+  function conteo(st) {
+    if (!st) return { recogidas: 0, colocadas: 0, enMano: false };
+    if (st.fase === "ESPERA_PILA") return { recogidas: 0, colocadas: st.ciclos ? 4 : 0, enMano: false };
+    const k = st.tarjeta || 0, fi = faseIdx(st.fase), colocadas = st.colocadas ?? 0;
+    const enMano = k > 0 && fi >= 3 && fi <= 7 && colocadas < k;
+    return { recogidas: enMano || colocadas >= k ? k : k - 1, colocadas, enMano };
+  }
+  // Tarjeta 32×22 con H1 en su esquina inferior izquierda (a 0°)
+  function cardSvg(x, y, ang, opts = {}) {
+    const w = opts.w || 32, h = opts.h || 22;
+    return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${-ang})" opacity="${opts.op ?? 1}">
+      <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="1.5" fill="var(--card)" stroke="var(--card-edge)" stroke-width="1"/>
+      <circle cx="${-w / 2 + 4}" cy="${h / 2 - 4}" r="2.3" fill="var(--signal)"/></g>`;
+  }
+  const armSvg = $("arm"), pSvg = $("pGauge");
+  function drawArm() {
+    const v = S.view, m = armPts(v.R1.pos, v.R2.pos), st = S.est;
+    const k = st && st.tarjeta, fi = st ? faseIdx(st.fase) : -1, c = conteo(st);
+    const grid = [];
+    for (let x = 0; x <= 400; x += 40) grid.push(`<line x1="${x}" y1="0" x2="${x}" y2="290" stroke="var(--line)" stroke-width=".4"/>`);
+    for (let y = 22; y <= 290; y += 40) grid.push(`<line x1="0" y1="${y}" x2="400" y2="${y}" stroke="var(--line)" stroke-width=".4"/>`);
+    let tray = `<rect x="${POS_BANDEJA[0] - SLOT[0] - 6}" y="${POS_BANDEJA[1] - SLOT[1] - 6}" width="${SLOT[0] * 2 + 12}" height="${SLOT[1] * 2 + 12}" fill="var(--panel)" stroke="var(--muted)"/>
+      <text x="${POS_BANDEJA[0] - SLOT[0] - 6}" y="${POS_BANDEJA[1] - SLOT[1] - 11}">BANDEJA</text>`;
+    for (let s = 1; s <= 4; s++) {
+      const [x, y] = slotXY(s), target = k === s && fi >= 5 && c.colocadas < s;
+      tray += `<rect x="${x - 19}" y="${y - 14}" width="38" height="28" fill="none" stroke="${target ? "var(--signal)" : "var(--line)"}" stroke-dasharray="${target ? "4 2" : "2 2"}" stroke-width="${target ? 1.6 : 1}"/>`;
+      tray += s <= c.colocadas ? cardSvg(x, y, 0, { w: 30, h: 21 }) : `<text x="${x - 3}" y="${y + 4}">${s}</text>`;
+    }
+    let pila = `<rect x="${POS_PILA[0] - 26}" y="${POS_PILA[1] - 26}" width="52" height="52" fill="var(--panel)" stroke="var(--muted)"/>
+      <text x="${POS_PILA[0] - 26}" y="${POS_PILA[1] - 31}">PILA</text>`;
+    const restantes = 4 - c.recogidas;
+    for (let i = 3; i >= c.recogidas; i--) pila += cardSvg(POS_PILA[0], POS_PILA[1], CFG.PILA[i], { op: i === c.recogidas ? 1 : 0.5 });
+    pila += `<text x="${POS_PILA[0] - 26}" y="${POS_PILA[1] + 40}">${restantes} en pila</text>`;
+    const p = (q) => q.map((cc) => cc.map((n) => n.toFixed(1)).join(",")).join(" ");
+    const carry = c.enMano ? cardSvg(m[2][0], m[2][1], fi >= 5 ? 0 : CFG.PILA[k - 1], { op: 0.95 }) : "";
+    armSvg.innerHTML = `<rect width="400" height="290" fill="var(--well)"/>${grid.join("")}
+      <circle cx="${BX}" cy="${BY}" r="${L1 + L2}" fill="none" stroke="var(--muted)" stroke-dasharray="2 4" opacity=".6"/>
+      ${tray}${pila}
+      <polyline points="${p(m)}" fill="none" stroke="var(--process)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+      <rect x="${BX - 22}" y="${BY - 10}" width="44" height="30" rx="2" fill="var(--panel-2)" stroke="var(--muted)"/>
+      <circle cx="${m[0][0]}" cy="${m[0][1]}" r="9" fill="var(--panel)" stroke="var(--process)" stroke-width="3"/>
+      <circle cx="${m[1][0]}" cy="${m[1][1]}" r="7" fill="var(--panel)" stroke="var(--process)" stroke-width="3"/>
+      ${carry}
+      <circle cx="${m[2][0]}" cy="${m[2][1]}" r="6" fill="${st && st.vacio ? "var(--signal)" : "var(--panel)"}" stroke="var(--process)" stroke-width="2.5"/>
+      <text x="${BX + 28}" y="${BY + 12}">R1 ${fmt(v.R1.pos)}°  R2 ${fmt(v.R2.pos)}°</text>
+      ${st && st.vacio ? `<text x="${m[2][0] + 12}" y="${m[2][1] - 14}" style="fill:var(--signal)">VENTOSA</text>` : ""}`;
+    const cp = CFG.ejes.P, top = 22, bot = 262, yv = (mm) => top + ((clamp(mm, cp.min, cp.max) - cp.min) / (cp.max - cp.min)) * (bot - top);
+    const ticks = [0, 25, 50, 75, 100].map((t) => { const y = yv(t); return `<line x1="28" x2="35" y1="${y}" y2="${y}" stroke="var(--muted)"/><text x="38" y="${y + 4}">${t}</text>`; }).join("");
+    pSvg.innerHTML = `<text x="2" y="12" style="font-family:var(--f-display);font-weight:600;letter-spacing:.06em">P · mm</text>
+      <rect x="12" y="${top}" width="14" height="${bot - top}" fill="var(--well)" stroke="var(--bezel)"/>
+      <rect x="12" y="${top}" width="14" height="${(yv(v.P.pos) - top).toFixed(1)}" fill="var(--process-soft)"/>
+      <rect x="6" y="${(yv(v.P.pos) - 4).toFixed(1)}" width="26" height="8" fill="var(--process)"/>${ticks}
+      <text x="2" y="284" style="fill:var(--ink)">${fmt(v.P.pos)} mm</text>`;
+  }
+  function drawPila(st) {
+    // Alzado lateral: a 0° la tarjeta se ve larga, a 90° se ve de canto (más corta)
+    const c = conteo(st);
+    let out = `<line x1="10" x2="150" y1="124" y2="124" stroke="var(--muted)"/>`;
+    for (let i = 0; i < 4; i++) {
+      const y = 100 - (3 - i) * 22, ang = CFG.PILA[i], w = ang === 0 ? 100 : 66, x = 82 - w / 2, fuera = i < c.recogidas, sig = !fuera && i === c.recogidas && !!st;
+      out += `<rect x="${x}" y="${y}" width="${w}" height="14" fill="${fuera ? "none" : "var(--card)"}" stroke="${sig ? "var(--signal)" : fuera ? "var(--line)" : "var(--card-edge)"}" stroke-dasharray="${fuera ? "3 3" : "none"}" stroke-width="${sig ? 2 : 1}"/>
+        <text x="4" y="${y + 11}" style="fill:${fuera ? "var(--muted)" : "var(--ink)"}">T${i + 1}</text>
+        <text x="${x + w + 4}" y="${y + 11}">${ang}°</text>`;
+    }
+    out += `<text x="4" y="142">T1 arriba, se toma primero</text>`;
+    $("pila").innerHTML = out;
+  }
+  function drawBandeja(st) {
+    const k = st && st.tarjeta, fi = st ? faseIdx(st.fase) : -1, c = conteo(st);
+    let out = `<rect x="14" y="6" width="132" height="112" fill="var(--well)" stroke="var(--muted)"/>`;
+    for (let s = 1; s <= 4; s++) {
+      const col = (s - 1) % 2, row = Math.floor((s - 1) / 2), x = 22 + col * 64, y = 14 + row * 52, w = 52, h = 44;
+      const target = k === s && fi >= 5 && c.colocadas < s;
+      out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${target ? "var(--signal)" : "var(--line)"}" stroke-dasharray="4 2" stroke-width="${target ? 2 : 1}"/>`;
+      if (s <= c.colocadas) out += `<rect x="${x + 3}" y="${y + 5}" width="${w - 6}" height="${h - 10}" rx="1.5" fill="var(--card)" stroke="var(--card-edge)"/>
+        <circle cx="${x + 9}" cy="${y + h - 11}" r="3.2" fill="var(--signal)"/><text x="${x + 15}" y="${y + h - 8}" style="fill:var(--ink)">H1</text>`;
+      out += `<text x="${x + w - 9}" y="${y + 12}" style="fill:var(--ink)">${s}</text>`;
+    }
+    out += `<text x="4" y="142">${c.colocadas} de 4 colocadas</text>`;
+    $("bandeja").innerHTML = out;
+  }
+  let raf = 0;
+  function tick() { if (!raf) raf = requestAnimationFrame(frame); }
+  function frame() {
+    raf = 0; let moving = false;
+    const kf = matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : 0.2;
+    EJES.forEach((e) => { const v = S.view[e], tgt = v.tpos ?? v.pos, dlt = tgt - v.pos;
+      if (Math.abs(dlt) > 0.05) { v.pos += dlt * kf; moving = true; } else v.pos = tgt; });
+    drawArm(); if (moving) tick();
+  }
+
+  // ---------- MQTT ----------
+  let client = null;
+  function desconectar() { if (client) { try { client.end(true); } catch {} client = null; } S.mqttOk = false; }
+  function conectar(cfg) {
+    pararDemo(); desconectar(); limpiar();
+    S.modo = "mqtt"; renderResumen();
+    if (!window.mqtt) { $("connState").innerHTML = `<span class="err">No se pudo cargar la librería MQTT (mqtt.js). Revisa la conexión a internet.</span>`; return; }
+    const pre = cfg.prefix.replace(/\/+$/, "");
+    $("connState").textContent = "Conectando…";
+    client = window.mqtt.connect(cfg.url, { clientId: "scada-" + Math.random().toString(16).slice(2, 10), reconnectPeriod: 3000, connectTimeout: 8000,
+      username: cfg.user || undefined, password: cfg.pass || undefined, clean: true });
+    client.on("connect", () => { S.mqttOk = true; $("connState").textContent = "Conectado"; client.subscribe([`${pre}/estado`, `${pre}/evento`], { qos: 1 }); renderResumen(); });
+    client.on("reconnect", () => { $("connState").textContent = "Reintentando…"; });
+    client.on("close", () => { S.mqttOk = false; renderResumen(); });
+    client.on("error", (e) => { $("connState").innerHTML = `<span class="err">Error: ${String(e && e.message || e).replace(/</g, "&lt;")}</span>`; });
+    client.on("message", (topic, buf) => {
+      let j; try { j = JSON.parse(buf.toString()); } catch { return; }
+      const sub = topic.slice(pre.length + 1);
+      if (sub === "estado") onEstado(j); else if (sub === "evento") onEvento(j);
+    });
+  }
+  function limpiar() {
+    Object.assign(S, { last: null, lastAt: 0, ciclo: null, alarmas: [], prevLoop: null, loopRate: null, loopQuieto: 0, tiempos: [], ultimoVisto: null, est: null });
+    EJES.forEach((e) => (S.hist[e] = []));
+    renderEstacion(null); renderAlarmas(); renderResumen();
+  }
+
+  // ---------- Simulador: mismo JSON v1 + est1 ----------
+  function ik(X, Y) { // punto del dibujo → ángulos R1, R2 (°)
+    const x = X - BX, y = BY - Y, c2 = clamp((x * x + y * y - L1 * L1 - L2 * L2) / (2 * L1 * L2), -1, 1);
+    const q2 = -Math.acos(c2), q1 = Math.atan2(y, x) - Math.atan2(L2 * Math.sin(q2), L1 + L2 * Math.cos(q2));
+    return [(q1 * 180) / Math.PI - 90, (q2 * 180) / Math.PI];
+  }
+  const Z_SEGURA = 8, Z_PILA = (k) => 62 + (k - 1) * 5, Z_BANDEJA = 84;
+  const SIM = { fallaPend: false };
+  function simInit() {
+    Object.assign(SIM, { t: 0, ciclo: "ARRANQUE", tc: 0, loop: 0, fallaEje: null, fallaT: 0,
+      temp: { pico: 34, stm32: 31 }, tarjeta: 0, fase: "ESPERA_PILA", tf: 0, vacio: 0, colocadas: 0, tCiclo: 0, tUltimo: 0, ciclos: 0 });
+    SIM.ax = { R1: { pos: 62, ref: 62 }, R2: { pos: -48, ref: -48 }, P: { pos: 30, ref: 30 } };
+    EJES.forEach((e) => Object.assign(SIM.ax[e], { u: 0, i: 0, lim: [0, 0], falla: "ninguna", est: "D", homed: false }));
+  }
+  const llego = () => EJES.every((e) => Math.abs(SIM.ax[e].ref - SIM.ax[e].pos) < 1.2);
+  function setXY(xy, z) { const [a, b] = ik(xy[0], xy[1]); SIM.ax.R1.ref = a; SIM.ax.R2.ref = b; if (z != null) SIM.ax.P.ref = z; }
+  function simProceso(dt) {
+    const sig = (f) => { SIM.fase = f; SIM.tf = 0; };
+    SIM.tf += dt;
+    if (SIM.fase === "ESPERA_PILA") {
+      SIM.ax.P.ref = Z_SEGURA;
+      if (SIM.tf > 3) { SIM.tarjeta = 1; SIM.colocadas = 0; SIM.tCiclo = 0; sig("PILA"); }
+      return;
+    }
+    SIM.tCiclo += dt;
+    const k = SIM.tarjeta;
+    switch (SIM.fase) {
+      case "PILA": setXY(POS_PILA, Z_SEGURA); if (SIM.tf > 0.3 && llego()) sig("BAJAR_PILA"); break;
+      case "BAJAR_PILA": SIM.ax.P.ref = Z_PILA(k); if (llego()) sig("VACIO"); break;
+      case "VACIO": SIM.vacio = 1; if (SIM.tf > 0.5) sig("SUBIR_PILA"); break;
+      case "SUBIR_PILA": SIM.ax.P.ref = Z_SEGURA; if (llego()) sig("CORREGIR"); break;
+      case "CORREGIR": if (SIM.tf > (CFG.PILA[k - 1] ? 0.9 : 0.2)) sig("BANDEJA"); break;
+      case "BANDEJA": setXY(slotXY(k), Z_SEGURA);
+        if (SIM.fallaPend && k === 3 && SIM.tf > 0.4) { SIM.fallaPend = false; SIM.fallaEje = "R2"; SIM.fallaT = 0; }
+        if (SIM.tf > 0.3 && llego()) sig("BAJAR_BANDEJA"); break;
+      case "BAJAR_BANDEJA": SIM.ax.P.ref = Z_BANDEJA; if (llego()) sig("SOLTAR"); break;
+      case "SOLTAR": SIM.vacio = 0; if (SIM.tf > 0.4) { SIM.colocadas = k; sig("SUBIR_BANDEJA"); } break;
+      case "SUBIR_BANDEJA": SIM.ax.P.ref = Z_SEGURA;
+        if (llego()) {
+          if (k < 4) { SIM.tarjeta = k + 1; sig("PILA"); }
+          else { SIM.tUltimo = +SIM.tCiclo.toFixed(1); SIM.ciclos++; SIM.tarjeta = 0; setXY([BX, BY - L1 - L2 + 20]); sig("ESPERA_PILA");
+            if (SIM.ciclos % 3 === 2) SIM.fallaPend = true; }
+        }
+        break;
+    }
+  }
+  function simPaso(dt) {
+    SIM.t += dt; SIM.tc += dt;
+    const go = (s) => { SIM.ciclo = s; SIM.tc = 0; };
+    const ax = SIM.ax, c = SIM.ciclo;
+    if (c === "ARRANQUE" && SIM.tc > 1.5) go("ESPERA");
+    else if (c === "ESPERA" && SIM.tc > 2) go("HOME_R1");
+    else if (c.startsWith("HOME_")) {
+      const e = c.slice(5), a = ax[e]; a.ref = 0;
+      if (Math.abs(a.pos) < 0.8 && SIM.tc > 0.8) { a.homed = true; go(e === "R1" ? "HOME_R2" : e === "R2" ? "HOME_P" : "LISTO"); if (e === "P") { SIM.fase = "ESPERA_PILA"; SIM.tf = 2; } }
+    } else if (c === "LISTO") simProceso(dt);
+    else if (c === "FALLA" && SIM.tc > 6) { simInit(); return; } // en el robot real hay que reiniciar
+    EJES.forEach((e) => {
+      const a = ax[e], span = CFG.ejes[e].max - CFG.ejes[e].min, homeAhora = SIM.ciclo === "HOME_" + e;
+      const activo = a.falla === "ninguna" && !["ARRANQUE", "ESPERA", "FALLA"].includes(SIM.ciclo) && (a.homed || homeAhora);
+      const duty = activo ? clamp(((a.ref - a.pos) / span) * 14, -0.9, 0.9) : 0;
+      a.pos += duty * span * 0.62 * dt;
+      a.u = duty * CFG.V_MOTOR;
+      let i = activo ? 0.08 + Math.abs(duty) * 1.9 + (Math.random() - 0.5) * 0.06 : 0.02;
+      if (SIM.fallaEje === e && SIM.ciclo === "LISTO") {
+        SIM.fallaT += dt; a.u = 10.8; i = 2.2 + SIM.fallaT * 2.6;
+        if (SIM.fallaT > 0.7) { a.falla = "sostenida"; const iv = +i.toFixed(2); setTimeout(() => onEvento({ up: Math.round(SIM.t), eje: e, falla: "sostenida", i: iv }), 0); go("FALLA"); SIM.fallaEje = null; }
+      }
+      a.i = Math.max(0, i);
+      a.en = a.falla === "ninguna" && SIM.ciclo !== "ARRANQUE" && SIM.ciclo !== "ESPERA";
+      a.est = a.falla !== "ninguna" ? "F" : homeAhora ? "H" : a.homed ? "R" : "D";
+      a.lim = [homeAhora && Math.abs(a.pos) < 1.5 ? 1 : 0, 0];
+    });
+    const carga = EJES.reduce((s, e) => s + ax[e].i, 0);
+    SIM.temp.pico += ((36.5 + Math.sin(SIM.t / 40)) - SIM.temp.pico) * 0.02;
+    SIM.temp.stm32 += ((32 + carga * 1.4) - SIM.temp.stm32) * 0.01;
+    if (SIM.ciclo !== "ARRANQUE") SIM.loop += Math.round(dt * 100);
+  }
+  function simEstado() {
+    const ax = SIM.ax, enProceso = SIM.ciclo === "LISTO" || SIM.ciclo === "FALLA";
+    return {
+      v: 1, up: Math.round(SIM.t), ciclo: SIM.ciclo, pico_ok: true, loop: SIM.loop,
+      temp: { pico: +SIM.temp.pico.toFixed(1), stm32: +SIM.temp.stm32.toFixed(1) },
+      vdda: +(3.31 + (Math.random() - 0.5) * 0.02).toFixed(2),
+      ejes: EJES.map((e) => { const a = ax[e];
+        return { n: e, est: a.est, pos: +(e === "P" ? a.pos : (a.pos * Math.PI) / 180).toFixed(e === "P" ? 2 : 3), u: +a.u.toFixed(2), i: +a.i.toFixed(2), en: a.en, lim: a.lim, falla: a.falla }; }),
+      est1: enProceso ? { tarjeta: SIM.tarjeta || null, fase: SIM.fase, vacio: SIM.vacio, colocadas: SIM.colocadas,
+        t_ciclo: +SIM.tCiclo.toFixed(1), t_ultimo: SIM.tUltimo, ciclos: SIM.ciclos } : undefined,
+    };
+  }
+  let simTimer = 0;
+  function demo() {
+    pararDemo(); desconectar(); limpiar(); SIM.fallaPend = false; simInit();
+    S.modo = "demo"; $("connState").textContent = "";
+    let acc = 0;
+    simTimer = setInterval(() => { simPaso(0.1); acc += 100; if (acc >= CFG.PERIODO_MS) { acc = 0; onEstado(simEstado()); } }, 100);
+    onEstado(simEstado());
+  }
+  function pararDemo() { clearInterval(simTimer); simTimer = 0; }
+
+  // ---------- Controles ----------
+  $("btnConnToggle").addEventListener("click", () => { $("connPanel").hidden = !$("connPanel").hidden; });
+  $("btnDemo").addEventListener("click", () => { demo(); $("connPanel").hidden = true; });
+  $("btnFault").addEventListener("click", () => {
+    if (S.modo !== "demo") return;
+    if (SIM.ciclo === "LISTO" && SIM.fase !== "ESPERA_PILA") { SIM.fallaEje = "R2"; SIM.fallaT = 0; } else SIM.fallaPend = true;
+  });
+  ["inUrl", "inPrefix", "inUser"].forEach((id) => { const v = store.get("scada." + id); if (v) $(id).value = v; });
+  $("connForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    ["inUrl", "inPrefix", "inUser"].forEach((id) => store.set("scada." + id, $(id).value));
+    conectar({ url: $("inUrl").value.trim(), prefix: $("inPrefix").value.trim() || "scara", user: $("inUser").value.trim(), pass: $("inPass").value });
+  });
+  setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("es", { hour12: false }); renderResumen(); }, 500);
+
+  renderEstacion(null); drawArm(); renderAlarmas();
+  demo(); // abre funcionando con datos simulados; "Conexión" para pasar al robot real
+})();
+</script>
+</body>
+</html>
