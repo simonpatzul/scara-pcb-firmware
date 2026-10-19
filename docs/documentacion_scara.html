@@ -181,6 +181,7 @@ footer{color:var(--muted);font-size:.9rem;border-top:1px solid var(--line);paddi
 </header>
 <div class="tabbar"><div class="tabs" role="tablist" aria-label="Partes del proyecto">
   <button role="tab" data-t="inicio">Inicio</button>
+  <button role="tab" data-t="tarea">La tarea</button>
   <button role="tab" data-t="robot">El robot</button>
   <button role="tab" data-t="pc"><small>1</small> PC · ROS 2</button>
   <button role="tab" data-t="pico"><small>2</small> Pico</button>
@@ -207,6 +208,45 @@ footer{color:var(--muted);font-size:.9rem;border-top:1px solid var(--line);paddi
     <div class="panel" style="display:grid;gap:8px"><h3>Qué ya existía</h3><p>El robot se movía con la baquelita: el PC mandaba ángulos, la Pico cerraba el lazo de cada motor y los drivers movían los motores. No se medía la corriente y nada protegía a los motores si se trababan.</p></div>
     <div class="panel" style="display:grid;gap:8px"><h3>Qué agrega la PCB</h3><p>Un STM32 que es el único que puede encender los drivers, mide su corriente y los corta si pasa algo raro. Además publica todo por Wi-Fi para verlo en una página SCADA.</p></div>
   </div>
+</section>
+
+<section class="tabp" data-tab="tarea" id="tarea">
+  <span class="eyebrow">Estación 1 · Grupo 7-G</span>
+  <h2>Pick &amp; place de PCBs: de una pila en cruz a una bandeja ordenada</h2>
+  <p>El robot toma 4 tarjetas vírgenes de una pila. En la pila están apiladas en cruz: cada tarjeta está girada 90° respecto a la anterior. Las deja sobre una bandeja de transporte, todas en el mismo sentido, con el agujero de montaje <b>H1 en la esquina inferior izquierda</b>. Todo el ciclo debe durar entre <b>20 y 50 segundos</b>.</p>
+  <div class="panel" style="display:grid;gap:12px">
+    <canvas id="pp" width="900" height="400" aria-label="Animación vista desde arriba: el brazo toma cada tarjeta de la pila, la gira si hace falta y la deja en su lugar de la bandeja"></canvas>
+    <div class="gauges">
+      <div class="g"><span>Tiempo del ciclo</span><strong id="ppt">0.0 s</strong></div>
+      <div class="g"><span>Tarjeta</span><strong id="ppn">1 de 4</strong></div>
+      <div class="g"><span>Paso</span><strong id="ppp" style="font-size:1rem">Ir a la pila</strong></div>
+      <div class="g"><span>Giro antes de dejarla</span><strong id="ppc">0°</strong></div>
+    </div>
+    <div>
+      <canvas id="ppbar" width="900" height="54" aria-label="Barra de tiempo del ciclo con la ventana permitida de 20 a 50 segundos"></canvas>
+    </div>
+    <div class="btns"><button id="ppPlay" class="on">Pausar</button><button id="ppRe">Reiniciar ciclo</button><span class="readout" style="align-self:center">La animación corre 4 veces más rápido que el tiempo real.</span></div>
+  </div>
+
+  <div class="two">
+    <div class="panel" style="display:grid;gap:8px"><h3>Control punto a punto</h3><p>Cada movimiento es de un punto conocido a otro: arriba de la pila, bajar, prender la ventosa, subir, ir a la ranura de la bandeja, bajar, soltar y subir. Las posiciones de la pila y de las 4 ranuras se programan una vez y se reutilizan en cada ciclo.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>Corrección angular programada</h3><p>Como el patrón de la pila es conocido, el programa sabe qué tarjetas vienen giradas 90°. Antes de depositar esas tarjetas, gira la herramienta −90° para que H1 quede siempre abajo a la izquierda. Las que vienen a 0° se dejan sin girar.</p></div>
+  </div>
+
+  <div class="panel scroll">
+    <table>
+      <thead><tr><th>Orden</th><th>Lugar en la pila</th><th>Orientación en la pila</th><th>Corrección</th><th>Ranura en la bandeja</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>arriba (4.ª)</td><td>0°</td><td>0°</td><td>1 · abajo izquierda</td></tr>
+        <tr><td>2</td><td>3.ª</td><td>90°</td><td>−90°</td><td>2 · abajo derecha</td></tr>
+        <tr><td>3</td><td>2.ª</td><td>0°</td><td>0°</td><td>3 · arriba izquierda</td></tr>
+        <tr><td>4</td><td>abajo (1.ª)</td><td>90°</td><td>−90°</td><td>4 · arriba derecha</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="readout">Supuestos de esta página, hasta confirmarlos: la tarjeta de arriba está a 0°, la bandeja tiene 4 ranuras en 2 × 2 y el giro de la ventosa lo hace el servo de la PCB (SERVO_PWM, GP8), porque el SCARA RRP no tiene una cuarta articulación de muñeca.</p>
+  <div class="msg"><b>Ojo al programar la corrección.</b> Si la ventosa no gira sola, la tarjeta gira con el brazo: entre tomarla y dejarla cambia su ángulo en Δ(q1 + q2). El giro que tiene que hacer el servo es: corrección de la pila − Δ(q1 + q2) entre el punto de la pila y el de la ranura. Ese Δ se puede calcular una vez para cada ranura con ik.py.</div>
+  <p>Presupuesto de tiempo estimado: unos 6.5 s por tarjeta (ir, tomar, llevar girando, dejar) más el regreso a casa da cerca de 30 s, dentro de la ventana de 20 a 50 s. Hay que medirlo en el robot real. Con P a unos 7 mm/s, las bajadas y subidas del eje vertical son lo que más tiempo consume, así que conviene que sean cortas.</p>
 </section>
 
 <section class="tabp" data-tab="pc" id="pc">
@@ -671,7 +711,7 @@ tabs.forEach((b,i)=>{b.addEventListener('click',()=>{openTab(b.dataset.t);window
   b.addEventListener('keydown',e=>{const d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(d){e.preventDefault();openTab(tabs[(i+d+tabs.length)%tabs.length].dataset.t,true);}});});
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{openTab(b.dataset.go);window.scrollTo({top:0})}));
 let start='inicio';const h=location.hash.slice(1);
-const map={robot:'robot',pc:'pc',pico:'pico',arquitectura:'pcb',pines:'pcb',pcb:'pcb',proteccion:'prot',prot:'prot',ciclo:'scada',mqtt:'scada',scada:'scada',estado:'estado'};
+const map={tarea:'tarea',robot:'robot',pc:'pc',pico:'pico',arquitectura:'pcb',pines:'pcb',pcb:'pcb',proteccion:'prot',prot:'prot',ciclo:'scada',mqtt:'scada',scada:'scada',estado:'estado'};
 if(map[h])start=map[h];else{try{start=localStorage.getItem('scara_tab')||'inicio'}catch(e){}}
 
 /* ---------- Cinemática inversa ---------- */
@@ -731,12 +771,74 @@ function drawCores(now){
   cx2.restore();
   cx2.fillStyle=css('--muted');cx2.font='11px '+css('--f-mono');cx2.fillText('una línea = 10 ms',W-130,14);
 }
-function drawStatic(){drawScara(t0+4000);drawCores(0);drawIK();drawPlot();}
+/* ---------- Pick & place ---------- */
+const ppc=document.getElementById('pp'),pg=ppc.getContext('2d'),pbc=document.getElementById('ppbar'),pb=pbc.getContext('2d');
+const STACK=[170,200],BASE=[450,385],SLOTS=[[600,270],[750,270],[600,135],[750,135]],ORI=[0,90,0,90];
+const PH=[['Ir a la pila',1.5],['Bajar y prender la ventosa',1.0],['Subir',0.5],['Llevar y corregir el ángulo',2.0],['Bajar y soltar',1.0],['Subir',0.5]];
+const PER=PH.reduce((a,p)=>a+p[1],0),HOME=4,TOTAL=PER*4+HOME;
+let ppT=0,ppOn=!reduce,ppLast=performance.now();
+document.getElementById('ppPlay').addEventListener('click',e=>{ppOn=!ppOn;e.target.textContent=ppOn?'Pausar':'Reproducir';e.target.classList.toggle('on',ppOn);});
+document.getElementById('ppRe').addEventListener('click',()=>{ppT=0;drawPP();});
+const lerp=(a,b,k)=>a+(b-a)*k,ease=k=>k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+function card(x,y,ang,alpha,lift){
+  pg.save();pg.translate(x,y);pg.rotate(-ang*Math.PI/180);pg.globalAlpha=alpha;
+  const w=96,h=66;if(lift){pg.shadowColor='rgba(0,0,0,.25)';pg.shadowBlur=12;pg.shadowOffsetY=6;}
+  pg.fillStyle=css('--pcb');pg.fillRect(-w/2,-h/2,w,h);pg.shadowColor='transparent';
+  pg.strokeStyle=css('--pcb-soft');pg.lineWidth=1.2;pg.strokeRect(-w/2+5,-h/2+5,w-10,h-10);
+  pg.fillStyle=css('--copper');for(let i=0;i<5;i++)pg.fillRect(-w/2+22+i*12,-6,6,12);
+  pg.fillStyle=css('--bg');pg.beginPath();pg.arc(-w/2+10,h/2-10,5,0,7);pg.fill();
+  pg.fillStyle=css('--surface');pg.font='600 10px '+css('--f-mono');pg.fillText('H1',-w/2+17,h/2-6);
+  pg.restore();pg.globalAlpha=1;}
+function arm(tx,ty){const L=200,d=Math.min(Math.hypot(tx-BASE[0],ty-BASE[1]),2*L-1),a=Math.atan2(ty-BASE[1],tx-BASE[0]),b=Math.acos(d/(2*L));
+  const ex=BASE[0]+L*Math.cos(a+b),ey=BASE[1]+L*Math.sin(a+b);
+  pg.lineCap='round';pg.globalAlpha=.85;pg.strokeStyle=css('--signal');pg.lineWidth=16;pg.beginPath();pg.moveTo(...BASE);pg.lineTo(ex,ey);pg.stroke();
+  pg.strokeStyle=css('--muted');pg.lineWidth=12;pg.beginPath();pg.moveTo(ex,ey);pg.lineTo(tx,ty);pg.stroke();pg.globalAlpha=1;
+  pg.fillStyle=css('--surface');pg.strokeStyle=css('--ink');pg.lineWidth=2;[[...BASE],[ex,ey]].forEach(([x,y])=>{pg.beginPath();pg.arc(x,y,9,0,7);pg.fill();pg.stroke();});}
+function ppState(t){
+  if(t>=PER*4){const k=ease(Math.min(1,(t-PER*4)/HOME));return {i:4,ph:'Regresar a casa y fin de ciclo',tip:[lerp(SLOTS[3][0],450,k),lerp(SLOTS[3][1],200,k)],carry:null,corr:0};}
+  const i=Math.floor(t/PER);let r=t-i*PER,j=0;while(j<5&&r>PH[j][1]){r-=PH[j][1];j++;}const k=ease(Math.min(1,r/PH[j][1]));
+  const from=i===0?[450,200]:SLOTS[i-1],S=SLOTS[i],c=ORI[i]?-90:0;let tip=STACK,carry=null,ang=ORI[i];
+  if(j===0)tip=[lerp(from[0],STACK[0],k),lerp(from[1],STACK[1],k)];
+  else if(j<=2){tip=STACK;if(j===2||k>.6)carry={a:ORI[i],lift:true};}
+  else if(j===3){tip=[lerp(STACK[0],S[0],k),lerp(STACK[1],S[1],k)];carry={a:ORI[i]+c*k,lift:true};}
+  else {tip=S;if(j===4&&k<.6)carry={a:0,lift:true};}
+  return {i,j,ph:PH[j][0],tip,carry,corr:c};}
+function drawPP(){
+  const W=ppc.width,H=ppc.height;pg.clearRect(0,0,W,H);
+  const s=ppState(ppT);
+  pg.strokeStyle=css('--line');pg.lineWidth=2;pg.setLineDash([6,6]);pg.strokeRect(STACK[0]-70,STACK[1]-70,140,140);pg.setLineDash([]);
+  pg.fillStyle=css('--muted');pg.font='600 13px '+css('--f-mono');pg.fillText('PILA (en cruz)',STACK[0]-58,STACK[1]+92);
+  pg.fillStyle=css('--copper-soft');pg.strokeStyle=css('--copper');pg.fillRect(515,62,320,282);pg.strokeRect(515,62,320,282);
+  pg.fillStyle=css('--copper');pg.fillText('BANDEJA DE TRANSPORTE',560,360);
+  SLOTS.forEach(([x,y],n)=>{pg.strokeStyle=css('--copper');pg.setLineDash([4,4]);pg.strokeRect(x-54,y-39,108,78);pg.setLineDash([]);pg.fillStyle=css('--copper');pg.font='12px '+css('--f-mono');pg.fillText(String(n+1),x-48,y-26);});
+  // tarjetas en la pila: quedan las de índice >= i (la de arriba es i)
+  for(let n=3;n>=0;n--){if(n<s.i)continue;if(n===s.i&&s.carry)continue;if(n===s.i&&s.j>=3)continue;card(STACK[0]+(3-n)*2,STACK[1]-(3-n)*2,ORI[n],1,false);}
+  for(let n=0;n<4;n++){const placed=n<s.i||(n===s.i&&s.j>=4&&!s.carry);if(placed)card(SLOTS[n][0],SLOTS[n][1],0,1,false);}
+  if(s.carry)card(s.tip[0],s.tip[1],s.carry.a,1,true);
+  arm(s.tip[0],s.tip[1]);
+  pg.fillStyle=css('--copper');pg.beginPath();pg.arc(s.tip[0],s.tip[1],7,0,7);pg.fill();
+  document.getElementById('ppt').textContent=ppT.toFixed(1)+' s';
+  document.getElementById('ppn').textContent=s.i<4?(s.i+1)+' de 4':'4 de 4';
+  document.getElementById('ppp').textContent=s.ph;
+  document.getElementById('ppc').textContent=s.i<4?(s.corr?'−90°':'0°'):'—';
+  // barra de tiempo
+  const BW=pbc.width,x=v=>20+(BW-40)*v/60;pb.clearRect(0,0,BW,54);
+  pb.fillStyle=css('--line');pb.fillRect(x(0),18,x(60)-x(0),12);
+  pb.fillStyle=css('--pcb-soft');pb.fillRect(x(20),14,x(50)-x(20),20);pb.strokeStyle=css('--pcb');pb.strokeRect(x(20),14,x(50)-x(20),20);
+  pb.fillStyle=css('--copper');pb.fillRect(x(0),20,x(Math.min(ppT,60))-x(0),8);
+  pb.font='11px '+css('--f-mono');pb.fillStyle=css('--muted');[0,10,20,30,40,50,60].forEach(v=>pb.fillText(v+' s',x(v)-8,50));
+  pb.fillStyle=css('--pcb');pb.fillText('ventana permitida 20–50 s',x(20)+6,10);
+  pb.fillStyle=css('--ink');pb.fillRect(x(TOTAL)-1,10,2,28);
+}
+function stepPP(now){const dt=Math.max(0,Math.min(.1,(now-ppLast)/1000));ppLast=now;if(ppOn){ppT+=dt*4;if(ppT>TOTAL+3)ppT=0;}drawPP();}
+
+function drawStatic(){drawScara(t0+4000);drawCores(0);drawIK();drawPlot();ppT=PER*1+5;drawPP();}
 
 openTab(start);
 function frame(now){
   if(cur_t==='robot')drawScara(now);
   if(cur_t==='pico')drawCores(now);
+  if(cur_t==='tarea')stepPP(now);else ppLast=now;
   stepSim(now);stepFsm(now);stepJson(now);requestAnimationFrame(frame);}
 if(reduce){drawStatic();stepJson(performance.now());setInterval(()=>{stepSim(performance.now())},100);}
 else requestAnimationFrame(frame);
