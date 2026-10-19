@@ -1,0 +1,744 @@
+<title>Bitácora SCARA RRP</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: una columna de lectura tipo cuaderno de ingeniería, con diagramas a lo ancho. Colores de máscara de soldadura y cobre. */
+:root{
+  --bg:#f2f5f1; --surface:#ffffff; --ink:#18231c; --muted:#56655b; --line:#cdd8cf;
+  --pcb:#1f7a4d; --pcb-soft:#dcefe3;
+  --copper:#b8642a; --copper-soft:#f6e6d8;
+  --signal:#2f5fb3; --signal-soft:#e0e8f7;
+  --net:#7a4fb0; --net-soft:#ece4f6;
+  --ok:#1f8a4c; --warn:#c08100; --bad:#c23b2e; --bad-soft:#f8dfdb;
+  --code-bg:#e9efe9;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1512; --surface:#161f1a; --ink:#e3ece5; --muted:#9aaa9f; --line:#2b3a31;
+  --pcb:#4cc58a; --pcb-soft:#173526; --copper:#e39058; --copper-soft:#3a2617;
+  --signal:#7ea6ef; --signal-soft:#1a2740; --net:#b893e6; --net-soft:#2a1f3a;
+  --ok:#4cc58a; --warn:#e7b23f; --bad:#ff7a6b; --bad-soft:#3d1c18; --code-bg:#1b2620; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1512; --surface:#161f1a; --ink:#e3ece5; --muted:#9aaa9f; --line:#2b3a31;
+  --pcb:#4cc58a; --pcb-soft:#173526; --copper:#e39058; --copper-soft:#3a2617;
+  --signal:#7ea6ef; --signal-soft:#1a2740; --net:#b893e6; --net-soft:#2a1f3a;
+  --ok:#4cc58a; --warn:#e7b23f; --bad:#ff7a6b; --bad-soft:#3d1c18; --code-bg:#1b2620; color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:17px/1.6 var(--f-body);margin:0}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px;display:grid;gap:56px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;line-height:1.1;text-wrap:balance;margin:0;letter-spacing:.01em}
+h1{font-size:clamp(2.4rem,6vw,3.6rem)}
+h2{font-size:clamp(1.7rem,4vw,2.2rem)}
+h3{font-size:1.3rem;font-weight:600}
+p{margin:0;max-width:68ch}
+.eyebrow{font:600 .78rem/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pcb)}
+section{display:grid;gap:18px;min-width:0}
+.lead{font-size:1.15rem;color:var(--muted)}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+
+/* Encabezado */
+header{display:grid;gap:16px;padding-bottom:28px;border-bottom:2px solid var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:600 .78rem/1 var(--f-mono);padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+.chip b{color:var(--ink);font-weight:600}
+nav{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.95rem}
+nav a{color:var(--pcb);text-decoration:none;border-bottom:1px solid transparent}
+nav a:hover,nav a:focus-visible{border-bottom-color:var(--pcb);outline:none}
+
+/* Paneles */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+svg text{font-family:var(--f-body)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.two>*{min-width:0}
+
+/* Diagrama de bloques */
+.blk rect{stroke-width:2;rx:8}
+.blk text{fill:var(--ink);font-size:15px;font-weight:700}
+.blk .sub{fill:var(--muted);font-size:12.5px;font-weight:400}
+.blk{cursor:pointer;outline:none}
+.blk:hover rect,.blk:focus-visible rect,.blk.sel rect{stroke-width:3.5}
+.k-ext rect{fill:var(--surface);stroke:var(--muted)}
+.k-ctrl rect{fill:var(--signal-soft);stroke:var(--signal)}
+.k-prot rect{fill:var(--pcb-soft);stroke:var(--pcb)}
+.k-pow rect{fill:var(--copper-soft);stroke:var(--copper)}
+.k-net rect{fill:var(--net-soft);stroke:var(--net)}
+.edge{fill:none;stroke-width:2.4;stroke-dasharray:7 7;animation:flow 1.1s linear infinite}
+.e-ctrl{stroke:var(--signal)} .e-prot{stroke:var(--pcb)} .e-pow{stroke:var(--copper)} .e-net{stroke:var(--net)} .e-ext{stroke:var(--muted)}
+.elabel{font-size:12px;fill:var(--muted);font-family:var(--f-mono)}
+@keyframes flow{to{stroke-dashoffset:-28}}
+.info{display:grid;gap:6px;border-left:3px solid var(--pcb);padding:4px 0 4px 14px}
+.info h3{font-size:1.15rem}
+
+/* Tablas */
+table{border-collapse:collapse;width:100%;font-size:.95rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 .75rem/1.2 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+td.old{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--bad)}
+td.new{color:var(--pcb);font-weight:600}
+
+/* SCARA */
+.scara{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;align-items:center}
+@media (max-width:720px){.scara{grid-template-columns:1fr}}
+canvas{display:block;width:100%;max-width:100%}
+.axes{display:grid;gap:10px}
+.axis{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:baseline}
+.axis b{font:700 1.3rem/1 var(--f-display);color:var(--copper)}
+.readout{font-family:var(--f-mono);font-size:.85rem;color:var(--muted)}
+
+/* Simulador */
+.sim{display:grid;gap:14px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:600 .92rem/1 var(--f-body);padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--pcb)}
+button:focus-visible{outline:2px solid var(--pcb);outline-offset:2px}
+button.on{background:var(--pcb);border-color:var(--pcb);color:var(--surface)}
+button.danger{border-color:var(--bad);color:var(--bad)}
+.gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.g{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:4px}
+.g span{font:600 .72rem/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.g strong{font:600 1.35rem/1.1 var(--f-mono);font-variant-numeric:tabular-nums}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--warn)}
+.led{display:inline-flex;align-items:center;gap:8px}
+.led::before{content:"";width:12px;height:12px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px var(--pcb-soft)}
+.led.off::before{background:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
+.msg{font-size:.95rem;padding:10px 12px;border-radius:8px;background:var(--pcb-soft)}
+.msg.bad{background:var(--bad-soft)}
+input[type=range]{width:100%;accent-color:var(--copper)}
+label{font-size:.95rem;color:var(--muted)}
+
+/* Máquina de estados */
+.st rect{fill:var(--surface);stroke:var(--line);stroke-width:2;transition:fill .25s,stroke .25s}
+.st text{fill:var(--ink);font:600 13px var(--f-mono);text-anchor:middle}
+.st.act rect{fill:var(--signal-soft);stroke:var(--signal);stroke-width:3}
+.st.fault rect{stroke:var(--bad);stroke-dasharray:5 4}
+.st.fault.act rect{fill:var(--bad-soft);stroke:var(--bad);stroke-dasharray:none}
+.arrow{fill:none;stroke:var(--muted);stroke-width:1.8}
+.arrow.f{stroke:var(--bad);stroke-dasharray:5 4}
+.ah{fill:var(--muted)} .ahf{fill:var(--bad)}
+
+/* JSON */
+pre{margin:0;font:13px/1.55 var(--f-mono);background:var(--code-bg);border-radius:8px;padding:14px;overflow-x:auto}
+.jk{color:var(--signal)} .js{color:var(--pcb)} .jn{color:var(--copper)}
+
+/* Lista de estado */
+.todo{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.todo li{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start}
+.tag{font:600 .7rem/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 8px;border-radius:5px;white-space:nowrap}
+.t-done{background:var(--pcb-soft);color:var(--pcb)}
+.t-work{background:var(--signal-soft);color:var(--signal)}
+.t-check{background:var(--copper-soft);color:var(--copper)}
+.t-bad{background:var(--bad-soft);color:var(--bad)}
+/* Pestañas */
+.wrap{gap:28px;grid-template-columns:minmax(0,1fr)}
+header{padding-bottom:20px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.tabbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px;border-bottom:1px solid var(--line);margin-top:-12px}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin}
+.tabs button{flex:0 0 auto;border-radius:999px;padding:9px 14px;font-size:.92rem;white-space:nowrap}
+.tabs button small{font:600 .7rem/1 var(--f-mono);color:var(--muted);margin-right:4px}
+.tabs button[aria-selected="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.tabs button[aria-selected="true"] small{color:var(--bg)}
+.tabp{animation:fadein .35s ease}
+@keyframes fadein{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* Pila de niveles */
+.stack{display:grid;gap:0;max-width:640px}
+.lvl{display:grid;grid-template-columns:48px 1fr 14px;gap:14px;align-items:center;text-align:left;padding:14px 16px;border-width:2px;border-radius:10px;font-weight:400}
+.lvl b{display:block;font:700 1.3rem/1.15 var(--f-display)}
+.lvl small{display:block;color:var(--muted);font-size:.9rem}
+.lvl .n{font:700 2rem/1 var(--f-display)}
+.lvl .pk{width:10px;height:10px;border-right:2px solid var(--muted);border-top:2px solid var(--muted);transform:rotate(45deg)}
+.l1{border-color:var(--muted)} .l1 .n{color:var(--muted)}
+.l2{border-color:var(--signal);background:var(--signal-soft)} .l2 .n{color:var(--signal)}
+.l3{border-color:var(--pcb);background:var(--pcb-soft)} .l3 .n{color:var(--pcb)}
+.l4{border-color:var(--net);background:var(--net-soft)} .l4 .n{color:var(--net)}
+.link{position:relative;height:44px;margin-left:38px;border-left:2px dashed var(--line);display:flex;align-items:center}
+.link::after{content:"";position:absolute;left:-6px;width:10px;height:10px;border-radius:50%;background:var(--copper);animation:drop 1.6s linear infinite}
+.link span{font:.78rem/1.2 var(--f-mono);color:var(--muted);padding-left:16px}
+@keyframes drop{from{top:0}to{top:34px}}
+footer{color:var(--muted);font-size:.9rem;border-top:1px solid var(--line);padding-top:18px}
+@media (prefers-reduced-motion: reduce){.edge,.link::after,.tabp{animation:none}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Proyecto · Programación SCARA</span>
+  <h1>Bitácora del SCARA RRP: de la baquelita a la PCB</h1>
+  <p class="lead">El robot ya funcionaba en una placa de baquelita con el software de un compañero. Ahora pasa a una PCB nueva que agrega un STM32 de protección, medición de corriente y envío de datos por internet. Elige una pestaña para ver cada parte.</p>
+  <div class="meta">
+    <span class="chip">Actualizado <b>19 oct 2026</b></span>
+    <span class="chip">Firmware base <b>jer0valencia/SCARA_RRP_</b></span>
+    <span class="chip">Código nuevo <b>repo nuevo de Simon</b></span>
+  </div>
+</header>
+<div class="tabbar"><div class="tabs" role="tablist" aria-label="Partes del proyecto">
+  <button role="tab" data-t="inicio">Inicio</button>
+  <button role="tab" data-t="robot">El robot</button>
+  <button role="tab" data-t="pc"><small>1</small> PC · ROS 2</button>
+  <button role="tab" data-t="pico"><small>2</small> Pico</button>
+  <button role="tab" data-t="pcb"><small>3</small> PCB</button>
+  <button role="tab" data-t="prot"><small>3</small> Protección</button>
+  <button role="tab" data-t="scada"><small>4</small> MQTT y SCADA</button>
+  <button role="tab" data-t="estado">Estado</button>
+</div></div>
+
+<section class="tabp" data-tab="inicio" id="inicio">
+  <span class="eyebrow">Mapa del proyecto</span>
+  <h2>El sistema en cuatro niveles</h2>
+  <p>Cada nivel le da órdenes al de abajo y recibe datos de vuelta. Los niveles 1 y 2 son el software del compañero, que ya funcionaba en la baquelita. Los niveles 3 y 4 son lo nuevo de la PCB. Toca un nivel para abrir su pestaña.</p>
+  <div class="stack">
+    <button class="lvl l1" data-go="pc"><span class="n">1</span><span><b>PC con ROS 2</b><small>repo jer0valencia/SCARA_RRP · teclado, cinemática inversa, punto a punto</small></span><span class="pk"></span></button>
+    <div class="link"><span>"r1,r2,p" por USB, 20 veces por segundo</span></div>
+    <button class="lvl l2" data-go="pico"><span class="n">2</span><span><b>Firmware de la Pico</b><small>repo jer0valencia/SCARA_RRP_ · lazo RST cada 10 ms, home, encoders</small></span><span class="pk"></span></button>
+    <div class="link"><span>PWM a los drivers · I2C con el STM32</span></div>
+    <button class="lvl l3" data-go="pcb"><span class="n">3</span><span><b>PCB nueva con STM32</b><small>drivers IFX007T, medición de corriente, corte de motores</small></span><span class="pk"></span></button>
+    <div class="link"><span>Wi-Fi FC41D · MQTT</span></div>
+    <button class="lvl l4" data-go="scada"><span class="n">4</span><span><b>Internet y SCADA</b><small>broker MQTT y página web que muestra el estado del robot</small></span><span class="pk"></span></button>
+  </div>
+  <div class="two">
+    <div class="panel" style="display:grid;gap:8px"><h3>Qué ya existía</h3><p>El robot se movía con la baquelita: el PC mandaba ángulos, la Pico cerraba el lazo de cada motor y los drivers movían los motores. No se medía la corriente y nada protegía a los motores si se trababan.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>Qué agrega la PCB</h3><p>Un STM32 que es el único que puede encender los drivers, mide su corriente y los corta si pasa algo raro. Además publica todo por Wi-Fi para verlo en una página SCADA.</p></div>
+  </div>
+</section>
+
+<section class="tabp" data-tab="pc" id="pc">
+  <span class="eyebrow">Nivel 1 · jer0valencia/SCARA_RRP · commit 26dd87b</span>
+  <h2>El PC decide a dónde ir</h2>
+  <p>El repo del PC tiene dos paquetes de ROS 2. <code>scara_pc</code> trae tres nodos de Python y <code>scara_description</code> trae el modelo del robot para verlo en RViz. Los nodos se hablan por dos topics, y solo el <b>bridge</b> toca el puerto USB.</p>
+  <div class="panel scroll">
+    <svg viewBox="0 0 900 300" width="100%" style="min-width:700px" role="img" aria-label="Nodos de ROS 2 y cómo se comunican">
+      <path class="edge e-ctrl" d="M190 70 L330 130"/>
+      <path class="edge e-ctrl" d="M190 220 L330 160"/>
+      <path class="edge e-ctrl" d="M480 145 L560 145"/>
+      <text class="elabel" x="210" y="145">/scara/target</text>
+      <path class="edge e-ext" d="M710 130 L790 130"/>
+      <text class="elabel" x="718" y="120">r1,r2,p</text>
+      <path class="edge e-pow" d="M790 165 L710 165"/>
+      <text class="elabel" x="716" y="185">posiciones</text>
+      <path class="edge e-pow" d="M635 190 L635 260 L110 260 L110 100"/>
+      <text class="elabel" x="300" y="252">/scara/joint_states (posición medida)</text>
+      <g class="blk k-ctrl"><rect x="40" y="40" width="150" height="60"/><text x="56" y="66">teleop.py</text><text class="sub" x="56" y="86">teclas Q/A W/S E/D</text></g>
+      <g class="blk k-ctrl"><rect x="40" y="190" width="150" height="60"/><text x="56" y="216">p2p.py + ik.py</text><text class="sub" x="56" y="236">escribe "x y p" en mm</text></g>
+      <g class="blk k-ext"><rect x="330" y="115" width="150" height="60"/><text x="346" y="141">/scara/target</text><text class="sub" x="346" y="161">[r1 rad, r2 rad, p mm]</text></g>
+      <g class="blk k-prot"><rect x="560" y="110" width="150" height="80"/><text x="576" y="138">bridge.py</text><text class="sub" x="576" y="158">reenvía el objetivo</text><text class="sub" x="576" y="176">cada 50 ms</text></g>
+      <g class="blk k-pow"><rect x="790" y="110" width="90" height="80"/><text x="804" y="146">Pico</text><text class="sub" x="804" y="166">nivel 2</text></g>
+    </svg>
+  </div>
+  <div class="two">
+    <div class="panel" style="display:grid;gap:8px"><h3>bridge.py</h3><p>Al arrancar manda un Enter para que la Pico haga el home y espera la palabra <code>LISTO</code>. Después, cada 50 ms, manda el último objetivo y publica la posición que responde la Pico.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>teleop.py</h3><p>Mientras mantienes una tecla, el objetivo es la posición actual más un adelanto (0.7 rad en R1, 0.4 rad en R2, 5 mm en P). Al soltarla, frena sin devolverse.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>p2p.py + ik.py</h3><p>Escribes un punto <code>x y p</code> en mm, la cinemática inversa lo convierte en ángulos y se publica una vez. La Pico suaviza la transición.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>Hombre muerto</h3><p>La Pico espera un comando cada menos de 200 ms. Como el bridge manda cada 50 ms, si el PC se cae el robot se queda quieto donde está.</p></div>
+  </div>
+
+  <h3>Cinemática inversa: arrastra la punta del brazo</h3>
+  <div class="panel scara">
+    <canvas id="ik" width="440" height="440" style="touch-action:none;cursor:crosshair" aria-label="Vista superior del brazo: arrastra para mover la punta y ver los ángulos que calcula ik.py"></canvas>
+    <div class="axes">
+      <p>El punto tiene que estar en el anillo entre 23 mm y 273.1 mm del centro (eslabones de 125.05 y 148.05 mm). Los ángulos se miden desde el eje Y.</p>
+      <div class="g"><span>ik.py calcula</span><strong id="ikq" class="mono">q1 = 0, q2 = 0</strong></div>
+      <div class="g"><span>p2p.py envía [q2, −q1, p]</span><strong id="iks" class="mono">r1 = 0, r2 = 0</strong></div>
+      <div class="msg" id="ikm">Dentro de los límites de la Pico.</div>
+      <label class="mono" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ikU" checked> mostrar el brazo con las medidas del URDF</label>
+    </div>
+  </div>
+
+  <h3>Para revisar con el compañero</h3>
+  <ul class="todo">
+    <li><span class="tag t-bad">Alta</span><span><b>La IK y el URDF no tienen el mismo eslabón 2</b>: 148.05 mm en ik.py contra 122.55 mm en el URDF. Con los mismos ángulos la punta cae 25 mm más lejos o más cerca (la línea punteada de arriba). Hay que medir el robot y dejar un solo valor.</span></li>
+    <li><span class="tag t-bad">Alta</span><span><b>p2p envía [q2, −q1]</b>: la R1 del firmware recibe el ángulo del codo. Puede ser intencional por el cableado, o un error.</span></li>
+    <li><span class="tag t-bad">Alta</span><span><b>p2p no revisa los límites de las juntas</b>: la Pico recorta en silencio (R1 ±1.885 rad, R2 ±1.57 rad) y el robot llega a otro punto.</span></li>
+    <li><span class="tag t-check">Media</span><span>El sentido de P es opuesto: en el URDF positivo baja, en el firmware positivo sube.</span></li>
+    <li><span class="tag t-check">Media</span><span>El home del bridge no tiene tiempo máximo: si la Pico falla el home, el bridge espera para siempre.</span></li>
+    <li><span class="tag t-check">Baja</span><span>RViz no muestra el robot real: el bridge publica en otro topic y con P en mm.</span></li>
+  </ul>
+</section>
+
+<section class="tabp" data-tab="pico" id="pico">
+  <span class="eyebrow">Nivel 2 · jer0valencia/SCARA_RRP_ · commit a45484c · 796 líneas C++</span>
+  <h2>La Pico mueve cada motor</h2>
+  <p>La Pico usa sus dos núcleos con trabajos separados. El <b>núcleo 1</b> solo corre el lazo de control cada 10 ms y es el único que toca los motores. El <b>núcleo 0</b> habla con el PC, hace el home y vigila que lleguen comandos.</p>
+  <div class="panel" style="display:grid;gap:10px">
+    <h3>Los dos núcleos en cámara lenta</h3>
+    <canvas id="cores" width="900" height="150" aria-label="Línea de tiempo animada: el núcleo 1 actualiza los tres ejes cada 10 ms mientras el núcleo 0 atiende el puerto serie"></canvas>
+    <p class="readout">El núcleo 1 calcula el próximo instante sumando 10 ms al anterior, así los retrasos no se acumulan. Los núcleos se pasan datos con variables de 32 bits, que se leen en una sola instrucción, y por eso no necesitan mutex.</p>
+  </div>
+  <h3>Cada eje es un objeto Axis con cuatro piezas</h3>
+  <div class="gauges">
+    <div class="g"><span>encoder.cpp + .pio</span><strong style="font-size:1.05rem">Encoder</strong><p class="readout">La PIO cuenta los flancos A/B en hardware: la CPU nunca pierde un paso. 3200 cuentas por vuelta.</p></div>
+    <div class="g"><span>motor_driver.cpp</span><strong style="font-size:1.05rem">MotorDriver</strong><p class="readout">Puente H con un PWM de 20 kHz por sentido. Nunca enciende los dos lados a la vez.</p></div>
+    <div class="g"><span>limit_switch.cpp</span><strong style="font-size:1.05rem">LimitSwitch</strong><p class="readout">Final de carrera activo en bajo. Solo se usa durante el home.</p></div>
+    <div class="g"><span>rst_controller.cpp</span><strong style="font-size:1.05rem">RstController</strong><p class="readout">Control RST de Landau en forma incremental, con anti-windup. Devuelve voltios.</p></div>
+  </div>
+  <div class="two">
+    <div class="panel" style="display:grid;gap:8px"><h3>Control RST</h3><p>La referencia escalón pasa por un modelo de segundo orden (ωn ≈ 5 rad/s) y el motor sigue esa curva suave. Al calcular cuánto cambiar el voltaje en vez del voltaje mismo, el controlador tiene un integrador y llega con error cero. El modelo del motor es Kv/(s(τs+1)) con Kv = 1.8 rad/s/V y τ = 0.04 s.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>Home de cada eje</h3><p>Busca el final de carrera con voltaje fijo, hace una pausa de 200 ms, va al punto de home y ahí pone el cero del encoder. Si tarda más de 15 s (30 s en P), el eje queda en falla y hay que reiniciar.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>axis_config.h</h3><p>Es la hoja de datos del robot: pines, cuentas, reducción (3:1 en R1 y R2, tornillo de 2 mm por vuelta en P), límites y coeficientes del RST. Es el archivo que más cambia con la PCB.</p></div>
+    <div class="panel" style="display:grid;gap:8px"><h3>Compilación</h3><p>Pico SDK con CMake: <code>mkdir build && cd build && cmake .. && make</code> genera <code>scara_fw.uf2</code>, que se arrastra a la Pico en modo BOOTSEL.</p></div>
+  </div>
+  <h3>Para revisar</h3>
+  <ul class="todo">
+    <li><span class="tag t-bad">Alta</span><span>En funcionamiento normal no se vigilan los finales de carrera: si un eje choca fuera del home, el firmware no lo nota. En la PCB, el STM32 cubre parte de esto cortando por corriente.</span></li>
+    <li><span class="tag t-check">Media</span><span>Los tres ejes usan el mismo controlador RST_R1, aunque P carga peso vertical y trabaja a 12 V.</span></li>
+    <li><span class="tag t-check">Media</span><span>Una falla de home deja la Pico en un bucle sin salida; hay que reiniciarla.</span></li>
+    <li><span class="tag t-check">Baja</span><span><code>prueba_p.cpp</code> usa los pines de R1 y voltaje 0, y no hay README ni los scripts de diseño de MATLAB.</span></li>
+  </ul>
+</section>
+
+<section class="tabp" data-tab="robot" id="robot">
+  <span class="eyebrow">El robot</span>
+  <h2>Tres ejes: dos que giran y uno que sube y baja</h2>
+  <p>RRP quiere decir Rotacional, Rotacional, Prismático. R1 es el hombro, R2 el codo y P el eje vertical. Cada eje tiene un motor Pololu de 12 V con encoder de 3200 cuentas por vuelta, y la Pico cierra el lazo de control cada 10 ms.</p>
+  <div class="panel scara">
+    <canvas id="scara" width="560" height="380" aria-label="Animación vista desde arriba del brazo SCARA moviendo sus tres ejes"></canvas>
+    <div class="axes">
+      <div class="axis"><b>R1</b><div>Hombro. Gira todo el brazo. <div class="readout" id="ro1">0.0°</div></div></div>
+      <div class="axis"><b>R2</b><div>Codo. Gira el segundo brazo respecto al primero. <div class="readout" id="ro2">0.0°</div></div></div>
+      <div class="axis"><b>P</b><div>Eje vertical con la bomba de vacío para agarrar piezas. <div class="readout" id="ro3">0.0 mm</div></div></div>
+      <p class="readout">En la PCB, M1 = R1, M2 = R2 y M3 = P. Cada eje tiene dos finales de carrera: home y extremo.</p>
+    </div>
+  </div>
+</section>
+
+<section class="tabp" data-tab="pcb" id="arquitectura">
+  <span class="eyebrow">Nivel 3 · PCB nueva</span>
+  <h2>Quién habla con quién en la PCB</h2>
+  <p>La Pico sigue moviendo los motores como antes. Lo nuevo es el STM32: es el único que puede encender los drivers, mide su corriente y los apaga si algo sale mal. Toca un bloque para ver qué hace.</p>
+  <div class="panel scroll">
+    <svg id="arch" viewBox="0 0 960 480" width="100%" style="min-width:760px" role="img" aria-label="Diagrama de bloques de la PCB">
+      <path class="edge e-ext" d="M140 90 L220 90"/>
+      <text class="elabel" x="146" y="80">USB</text>
+      <path class="edge e-ctrl" d="M390 120 L440 120 L440 180 L480 180"/>
+      <text class="elabel" x="398" y="112">PWM A/B</text>
+      <path class="edge e-pow" d="M830 150 L830 50 L390 50"/>
+      <text class="elabel" x="520" y="42">encoders + finales de carrera</text>
+      <path class="edge e-prot" d="M305 150 L305 300"/>
+      <text class="elabel" x="314" y="220">I2C</text>
+      <text class="elabel" x="314" y="236">latido · fallas</text>
+      <path class="edge e-prot" d="M390 320 L520 320 L520 260"/>
+      <text class="elabel" x="400" y="312">EN (enciende/corta)</text>
+      <path class="edge e-pow" d="M600 260 L600 360 L390 360"/>
+      <text class="elabel" x="470" y="352">corriente IS → ADC</text>
+      <path class="edge e-pow" d="M650 205 L740 205"/>
+      <text class="elabel" x="664" y="196">12 V</text>
+      <path class="edge e-net" d="M390 410 L480 410"/>
+      <text class="elabel" x="404" y="402">UART</text>
+      <path class="edge e-net" d="M630 420 L680 420"/>
+      <text class="elabel" x="636" y="410">Wi-Fi</text>
+      <path class="edge e-net" d="M800 420 L840 420"/>
+
+      <g class="blk k-ext" tabindex="0" data-k="pc"><rect x="20" y="60" width="120" height="60"/><text x="34" y="86">PC</text><text class="sub" x="34" y="106">manda r1,r2,p</text></g>
+      <g class="blk k-ctrl" tabindex="0" data-k="pico"><rect x="220" y="30" width="170" height="120"/><text x="236" y="62">Raspberry Pi Pico</text><text class="sub" x="236" y="84">control de ejes</text><text class="sub" x="236" y="102">lazo cada 10 ms</text><text class="sub" x="236" y="120">servo y bomba</text></g>
+      <g class="blk k-prot" tabindex="0" data-k="stm"><rect x="220" y="300" width="170" height="130"/><text x="236" y="330">STM32F030</text><text class="sub" x="236" y="352">protección</text><text class="sub" x="236" y="370">6 lecturas de corriente</text><text class="sub" x="236" y="388">3 EN de los drivers</text></g>
+      <g class="blk k-pow" tabindex="0" data-k="drv"><rect x="480" y="150" width="170" height="110"/><text x="496" y="182">Drivers IFX007T</text><text class="sub" x="496" y="204">2 medios puentes</text><text class="sub" x="496" y="222">por motor = puente H</text></g>
+      <g class="blk k-pow" tabindex="0" data-k="mot"><rect x="740" y="150" width="190" height="110"/><text x="756" y="182">Motores</text><text class="sub" x="756" y="204">R1 · R2 · P</text><text class="sub" x="756" y="222">con encoder</text></g>
+      <g class="blk k-net" tabindex="0" data-k="fc"><rect x="480" y="380" width="150" height="80"/><text x="496" y="412">FC41D</text><text class="sub" x="496" y="434">módulo Wi-Fi</text></g>
+      <g class="blk k-net" tabindex="0" data-k="mq"><rect x="680" y="380" width="120" height="80"/><text x="694" y="412">Broker</text><text class="sub" x="694" y="434">MQTT</text></g>
+      <g class="blk k-net" tabindex="0" data-k="sc"><rect x="840" y="380" width="100" height="80"/><text x="852" y="412">SCADA</text><text class="sub" x="852" y="434">página web</text></g>
+    </svg>
+  </div>
+  <div class="info" id="archInfo" aria-live="polite"></div>
+</section>
+
+<section class="tabp" data-tab="pcb" id="pines">
+  <span class="eyebrow">Nivel 3 · Pines</span>
+  <h2>Qué cambió de la baquelita a la PCB</h2>
+  <p>Casi todos los pines de la Pico están en <code>config/axis_config.h</code>, así que el cambio se concentra en un archivo. El cambio grande es que la Pico <b>ya no maneja los EN</b>: ahora los maneja el STM32.</p>
+  <div class="panel scroll">
+    <table>
+      <thead><tr><th>Señal</th><th>Baquelita</th><th>PCB</th></tr></thead>
+      <tbody>
+        <tr><td>R1 (M1) PWM A/B</td><td class="old">GP6 / GP7</td><td class="new">GP0 / GP1</td></tr>
+        <tr><td>R2 (M2) PWM A/B</td><td class="old">GP14 / GP15</td><td class="new">GP2 / GP3</td></tr>
+        <tr><td>P (M3) PWM A/B</td><td class="old">GP1 / GP0</td><td class="new">GP6 / GP7</td></tr>
+        <tr><td>EN de los motores</td><td class="old">6 pines en la Pico</td><td class="new">STM32 PB12 / PB13 / PB14</td></tr>
+        <tr><td>Encoder R1 A/B</td><td class="old">GP11 / GP10</td><td class="new">GP10 / GP11</td></tr>
+        <tr><td>Encoder R2 A/B</td><td>GP12 / GP13</td><td>GP12 / GP13</td></tr>
+        <tr><td>Encoder P A/B</td><td class="old">GP8 / GP9</td><td class="new">GP14 / GP15</td></tr>
+        <tr><td>Finales de carrera</td><td class="old">3: GP21, GP20, GP19</td><td class="new">6: GP17–GP22 (R1: 1–2, R2: 3–4, P: 5–6)</td></tr>
+        <tr><td>I2C con el STM32</td><td>—</td><td class="new">GP4 SCL / GP5 SDA</td></tr>
+        <tr><td>Servo / bomba</td><td>—</td><td class="new">GP8 / GP9</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="msg bad"><b>No flashees el programa viejo en la PCB.</b> Pondría como salidas los antiguos EN, que en la PCB son el PWM de R2 y el I2C, y mandaría PWM a motores equivocados.</div>
+  <p>Las dos reglas del código se cumplen en la PCB: las fases A y B de cada encoder están en GPIO consecutivos, y los dos PWM de cada motor comparten una slice (pareja GP2n / GP2n+1).</p>
+</section>
+
+<section class="tabp" data-tab="prot" id="proteccion">
+  <span class="eyebrow">Nivel 3 · Protección del STM32</span>
+  <h2>Cómo el STM32 corta un motor antes de que se dañe</h2>
+  <p>Cada driver IFX007T entrega por su pin IS una corriente pequeña, proporcional a la del motor (unas 20 000 veces menor). Pasa por una resistencia de 470 Ω y el STM32 la lee con su ADC. Los motores trabajan normalmente a 1.5–2 A y se traban a 5.5 A. Hay dos reglas de corte:</p>
+  <div class="two">
+    <div class="panel"><h3>Sostenida</h3><p>Más de <b>3 A durante 500 ms</b>. Es un eje trabado o empujando contra algo.</p></div>
+    <div class="panel"><h3>Pico</h3><p>Más de <b>4.5 A durante 20 ms</b>. Es un choque; corta de inmediato.</p></div>
+  </div>
+  <p>Al cortar, el EN de ese motor queda apagado hasta que la Pico mande un reset. Si la Pico deja de mandar su latido o el STM32 se cuelga, los EN se apagan solos porque tienen resistencia pull-down. Prueba el simulador:</p>
+
+  <div class="panel sim">
+    <div class="btns" role="group" aria-label="Escenarios">
+      <button data-sc="1.6" class="on">Trabajo normal</button>
+      <button data-sc="3.4">Eje trabado</button>
+      <button data-sc="5.2">Choque</button>
+      <button data-sc="drv">Falla del driver</button>
+      <button id="rst" class="danger">Reset desde la Pico</button>
+    </div>
+    <div><label for="ia">Corriente pedida al motor: <span id="iav" class="mono">1.6 A</span></label>
+    <input id="ia" type="range" min="0" max="6" step="0.1" value="1.6"></div>
+    <canvas id="plot" width="900" height="220" aria-label="Gráfica de la corriente del motor en el tiempo con los umbrales de 3 A y 4.5 A"></canvas>
+    <div class="gauges">
+      <div class="g"><span>Corriente</span><strong id="gi">0.00 A</strong></div>
+      <div class="g"><span>Voltaje en el ADC</span><strong id="gv">0 mV</strong></div>
+      <div class="g"><span>Cuentas ADC</span><strong id="gc">0</strong></div>
+      <div class="g"><span>&gt;3 A acumulado</span><strong id="gs">0 ms</strong><div class="bar"><i id="bs"></i></div></div>
+      <div class="g"><span>&gt;4.5 A acumulado</span><strong id="gp">0 ms</strong><div class="bar"><i id="bp"></i></div></div>
+      <div class="g"><span>EN del driver</span><strong id="gen" class="led">Encendido</strong></div>
+    </div>
+    <div class="msg" id="simMsg" aria-live="polite">Todo normal: la corriente está bajo los dos umbrales.</div>
+  </div>
+
+  <div class="panel scroll">
+    <table>
+      <thead><tr><th>Corriente del motor</th><th>Corriente en IS</th><th>Voltaje en el ADC</th><th>Cuentas (12 bits)</th></tr></thead>
+      <tbody>
+        <tr><td>1 A</td><td>50 µA</td><td>24 mV</td><td>~29</td></tr>
+        <tr><td>2 A (máximo normal)</td><td>100 µA</td><td>47 mV</td><td>~58</td></tr>
+        <tr><td>3 A (umbral sostenido)</td><td>150 µA</td><td>71 mV</td><td>~87</td></tr>
+        <tr><td>4.5 A (umbral de pico)</td><td>225 µA</td><td>106 mV</td><td>~131</td></tr>
+        <tr><td>Falla del driver</td><td>~4.5 mA</td><td>~2.1 V</td><td>~2600</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>La resistencia de 470 Ω es una buena elección: en falla el pin llega a unos 2.1 V, por debajo de los 3.3 V que aguanta el STM32. La contra es la resolución baja, unas 29 cuentas por amperio, así que el firmware calibra el cero al arrancar, promedia las lecturas, y conviene ajustar los umbrales midiendo una vez con una pinza. Estos números usan la razón típica de la familia y falta confirmarla con la hoja de datos del IFX007T.</p>
+</section>
+
+<section class="tabp" data-tab="scada" id="ciclo">
+  <span class="eyebrow">Nivel 4 · Lo que ve el SCADA</span>
+  <h2>Por qué etapas pasa el programa</h2>
+  <p>La Pico avisa en qué etapa está y el STM32 lo reenvía por MQTT, así la página SCADA muestra qué está haciendo el robot.</p>
+  <div class="panel scroll">
+    <svg id="fsm" viewBox="0 0 940 270" width="100%" style="min-width:760px" role="img" aria-label="Máquina de estados del programa de la Pico">
+      <defs>
+        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0 L10 5 L0 10z"/></marker>
+        <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahf" d="M0 0 L10 5 L0 10z"/></marker>
+      </defs>
+      <path class="arrow" marker-end="url(#m1)" d="M130 63 L148 63"/>
+      <path class="arrow" marker-end="url(#m1)" d="M260 63 L278 63"/>
+      <path class="arrow" marker-end="url(#m1)" d="M390 63 L408 63"/>
+      <path class="arrow" marker-end="url(#m1)" d="M520 63 L538 63"/>
+      <path class="arrow" marker-end="url(#m1)" d="M650 63 L668 63"/>
+      <path class="arrow" marker-end="url(#m1)" d="M710 86 L710 168"/>
+      <path class="arrow" marker-end="url(#m1)" d="M740 168 L740 88"/>
+      <path class="arrow f" marker-end="url(#m2)" d="M335 86 L395 188"/>
+      <path class="arrow f" marker-end="url(#m2)" d="M465 86 L430 188"/>
+      <path class="arrow f" marker-end="url(#m2)" d="M595 86 L465 188"/>
+      <path class="arrow f" marker-end="url(#m2)" d="M680 86 L480 196"/>
+      <g class="st" data-s="ARRANQUE"><rect x="20" y="40" width="110" height="46" rx="8"/><text x="75" y="68">ARRANQUE</text></g>
+      <g class="st" data-s="ESPERA"><rect x="150" y="40" width="110" height="46" rx="8"/><text x="205" y="68">ESPERA</text></g>
+      <g class="st" data-s="HOME_R1"><rect x="280" y="40" width="110" height="46" rx="8"/><text x="335" y="68">HOME_R1</text></g>
+      <g class="st" data-s="HOME_R2"><rect x="410" y="40" width="110" height="46" rx="8"/><text x="465" y="68">HOME_R2</text></g>
+      <g class="st" data-s="HOME_P"><rect x="540" y="40" width="110" height="46" rx="8"/><text x="595" y="68">HOME_P</text></g>
+      <g class="st" data-s="LISTO"><rect x="670" y="40" width="110" height="46" rx="8"/><text x="725" y="68">LISTO</text></g>
+      <g class="st" data-s="QUIETO"><rect x="670" y="170" width="110" height="46" rx="8"/><text x="725" y="198">QUIETO</text></g>
+      <g class="st fault" data-s="FALLA"><rect x="350" y="190" width="130" height="46" rx="8"/><text x="415" y="218">FALLA</text></g>
+      <g class="st fault" data-s="SIN_PICO"><rect x="20" y="190" width="130" height="46" rx="8"/><text x="85" y="218">SIN_PICO</text></g>
+      <text class="elabel" x="20" y="256">la pone el STM32</text>
+      <text class="elabel" x="790" y="120">el PC deja de</text>
+      <text class="elabel" x="790" y="136">mandar objetivos</text>
+    </svg>
+  </div>
+  <div class="btns"><button id="play" class="on">Pausar</button><button id="toFault" class="danger">Simular falla en un home</button></div>
+  <div class="info" id="fsmInfo" aria-live="polite"></div>
+</section>
+
+<section class="tabp" data-tab="scada" id="mqtt">
+  <span class="eyebrow">Nivel 4 · Datos por internet</span>
+  <h2>Qué publica el STM32 por MQTT</h2>
+  <p>El STM32 junta sus datos con los que le pasa la Pico por I2C y los publica por el FC41D. Para pruebas se usa el broker público <code>broker.hivemq.com</code> (puerto 1883 para el robot, WebSocket <code>wss://broker.hivemq.com:8884/mqtt</code> para el navegador). Conviene cambiar el prefijo <code>scara/</code> por uno propio, como <code>scara-simon/</code>, para no mezclarse con otros usuarios.</p>
+  <div class="two">
+    <div class="panel" style="display:grid;gap:10px"><h3><code>scara/estado</code></h3><p>Cada 500 ms. Estado general y de cada eje.</p>
+<pre id="json"></pre></div>
+    <div class="panel" style="display:grid;gap:10px"><h3><code>scara/evento</code></h3><p>Al instante, cuando un eje entra en falla o se borra la falla.</p>
+<pre><span class="jk">{</span> <span class="jk">"up"</span>: <span class="jn">1240</span>, <span class="jk">"eje"</span>: <span class="js">"R1"</span>,
+  <span class="jk">"falla"</span>: <span class="js">"pico"</span>, <span class="jk">"i"</span>: <span class="jn">4.82</span> <span class="jk">}</span></pre>
+      <table>
+        <thead><tr><th>Campo</th><th>Qué dice</th></tr></thead>
+        <tbody>
+          <tr><td><code>ciclo</code></td><td>etapa de la Pico (arriba)</td></tr>
+          <tr><td><code>pico_ok</code></td><td>la Pico responde al STM32</td></tr>
+          <tr><td><code>loop</code></td><td>si deja de subir, el lazo está trabado</td></tr>
+          <tr><td><code>est</code></td><td>D deshabilitado, H home, R listo, F falla</td></tr>
+          <tr><td><code>u</code> / <code>i</code></td><td>voltaje que manda la Pico y corriente medida</td></tr>
+          <tr><td><code>falla</code></td><td>ninguna, sostenida, pico, driver o enlace</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p>Dos límites del hardware que la página SCADA tiene en cuenta: el IFX007T no da su temperatura (solo avisa cuando se sobrecalienta, como <code>falla: "driver"</code>), y la PCB no mide el voltaje de los motores, así que <code>u</code> es el voltaje que la Pico calcula que manda.</p>
+</section>
+
+<section class="tabp" data-tab="estado" id="estado">
+  <span class="eyebrow">Estado del proyecto</span>
+  <h2>Qué está hecho y qué falta</h2>
+  <div class="two">
+    <div class="panel" style="display:grid;gap:12px"><h3>Decidido o hecho</h3>
+      <ul class="todo">
+        <li><span class="tag t-done">Hecho</span><span>Revisado el firmware del compañero y sus pines.</span></li>
+        <li><span class="tag t-done">Hecho</span><span>Analizados los esquemáticos de control y potencia, y el BOM.</span></li>
+        <li><span class="tag t-done">Decidido</span><span>Drivers IFX007T con R_IS de 470 Ω; umbrales de 3 A / 500 ms y 4.5 A / 20 ms.</span></li>
+        <li><span class="tag t-done">Decidido</span><span>M1 = R1, M2 = R2, M3 = P; límites en orden, dos por eje.</span></li>
+        <li><span class="tag t-done">Decidido</span><span>Telemetría por MQTT y código en un repo nuevo de Simon.</span></li>
+        <li><span class="tag t-done">Hecho</span><span>Definido el formato de los mensajes MQTT.</span></li>
+      </ul>
+    </div>
+    <div class="panel" style="display:grid;gap:12px"><h3>En curso o por revisar</h3>
+      <ul class="todo">
+        <li><span class="tag t-work">Por subir</span><span>Firmware del STM32 (protección, I2C y MQTT) y de la Pico adaptada: ya compilan y las pruebas de protección pasan. Falta crear el repo nuevo en GitHub para subirlos.</span></li>
+        <li><span class="tag t-check">Revisar</span><span>En la PCB, SCL y SDA quedaron cruzados respecto al I2C por hardware de la Pico (GP4/GP5). El firmware lo resuelve con I2C por software.</span></li>
+        <li><span class="tag t-work">En curso</span><span>Página SCADA que lee los datos MQTT.</span></li>
+        <li><span class="tag t-check">Revisar</span><span>Sentido de los encoders eje por eje: el de R1 cambió de orden A/B.</span></li>
+        <li><span class="tag t-check">Revisar</span><span>Servo y bomba comparten frecuencia PWM (50 Hz). Para prender y apagar la bomba no importa.</span></li>
+        <li><span class="tag t-check">Revisar</span><span>Ajustar los umbrales de corriente midiendo con una pinza.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>Basado en los repos jer0valencia/SCARA_RRP (PC) y jer0valencia/SCARA_RRP_ (Pico), la documentación del software que compartió Simon, el análisis de la PCB y los hilos del firmware y del SCADA. Se actualiza cuando avanza el trabajo.</footer>
+</div>
+
+<script>
+(function(){
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- Arquitectura ---------- */
+const INFO={
+  pc:['PC','Manda los objetivos de cada eje por el puerto serie USB, con el formato r1,r2,p. También se usa para dar el Enter que arranca el home.'],
+  pico:['Raspberry Pi Pico','Es el cerebro del movimiento. El núcleo 1 corre el lazo de control cada 10 ms con los encoders; el núcleo 0 hace el home y atiende los comandos. En la PCB además maneja el servo y la bomba, y le pide al STM32 que encienda los ejes.'],
+  stm:['STM32F030 de protección','Es el guardián. Es el único que puede encender los drivers (EN), lee la corriente de cada motor con su ADC y corta el motor si pasa los umbrales. Si la Pico deja de mandar su latido, apaga todo. También publica los datos por Wi-Fi.'],
+  drv:['Drivers IFX007T','Cada motor usa dos medios puentes que juntos forman un puente H. La Pico manda un PWM por sentido (A o B) y el STM32 controla el EN de ambos. El pin IS de cada medio puente informa la corriente.'],
+  mot:['Motores','Motores Pololu de 12 V con encoder de 3200 cuentas por vuelta. Los encoders y los 6 finales de carrera vuelven a la Pico; los encoders pasan por un traductor de 5 V a 3.3 V.'],
+  fc:['FC41D','Módulo Wi-Fi que el STM32 maneja con comandos AT por UART. Se conecta a la red y publica los mensajes MQTT.'],
+  mq:['Broker MQTT','Un servidor que recibe los mensajes del robot y los reparte a quien esté escuchando. Para pruebas, broker.hivemq.com.'],
+  sc:['Página SCADA','Página web que se suscribe al broker y muestra la etapa del programa, las corrientes, las temperaturas de la Pico y del STM32, y las fallas.']
+};
+const info=document.getElementById('archInfo');
+const blks=[...document.querySelectorAll('.blk')];
+function pick(k){blks.forEach(b=>b.classList.toggle('sel',b.dataset.k===k));const d=INFO[k];info.innerHTML='<h3>'+d[0]+'</h3><p>'+d[1]+'</p>';}
+blks.forEach(b=>{b.addEventListener('click',()=>pick(b.dataset.k));b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick(b.dataset.k)}})});
+pick('stm');
+
+/* ---------- SCARA ---------- */
+const sc=document.getElementById('scara'),sx=sc.getContext('2d');
+const ro=[1,2,3].map(i=>document.getElementById('ro'+i));
+let t0=performance.now();
+function drawScara(now){
+  const t=(now-t0)/1000, W=sc.width,H=sc.height;
+  const a1=0.9*Math.sin(t*0.5)+0.2, a2=1.2*Math.sin(t*0.8+1), pz=40+35*Math.sin(t*1.3);
+  sx.clearRect(0,0,W,H);
+  const ink=css('--ink'),mut=css('--muted'),cu=css('--copper'),pcb=css('--pcb'),sig=css('--signal'),line=css('--line');
+  const bx=200,by=260,L1=130,L2=110;
+  // área de trabajo
+  sx.strokeStyle=line;sx.setLineDash([4,6]);sx.lineWidth=1.5;
+  sx.beginPath();sx.arc(bx,by,L1+L2,Math.PI*1.02,Math.PI*1.98+0.6);sx.stroke();sx.setLineDash([]);
+  const ex=bx+L1*Math.cos(-Math.PI/2+a1),ey=by+L1*Math.sin(-Math.PI/2+a1);
+  const tx=ex+L2*Math.cos(-Math.PI/2+a1+a2),ty=ey+L2*Math.sin(-Math.PI/2+a1+a2);
+  sx.lineCap='round';
+  sx.strokeStyle=sig;sx.lineWidth=18;sx.beginPath();sx.moveTo(bx,by);sx.lineTo(ex,ey);sx.stroke();
+  sx.strokeStyle=pcb;sx.lineWidth=14;sx.beginPath();sx.moveTo(ex,ey);sx.lineTo(tx,ty);sx.stroke();
+  [[bx,by,16],[ex,ey,11]].forEach(([x,y,r])=>{sx.fillStyle=css('--surface');sx.strokeStyle=ink;sx.lineWidth=2.5;sx.beginPath();sx.arc(x,y,r,0,7);sx.fill();sx.stroke();});
+  const rr=8+ (80-pz)/10;
+  sx.fillStyle=cu;sx.beginPath();sx.arc(tx,ty,rr,0,7);sx.fill();
+  sx.fillStyle=ink;sx.font='600 15px '+css('--f-display');
+  sx.fillText('R1',bx-36,by+6);sx.fillText('R2',ex+16,ey-8);sx.fillText('P',tx+rr+6,ty+5);
+  // eje P como regla vertical
+  const gx=470,gy0=60,gy1=320;
+  sx.strokeStyle=mut;sx.lineWidth=1.5;sx.beginPath();sx.moveTo(gx,gy0);sx.lineTo(gx,gy1);sx.stroke();
+  sx.fillStyle=mut;sx.font='12px '+css('--f-mono');
+  for(let m=0;m<=80;m+=20){const y=gy0+(gy1-gy0)*m/80;sx.beginPath();sx.moveTo(gx-6,y);sx.lineTo(gx+6,y);sx.stroke();sx.fillText(m+' mm',gx+12,y+4);}
+  const py=gy0+(gy1-gy0)*pz/80;
+  sx.fillStyle=cu;sx.fillRect(gx-14,py-7,28,14);
+  sx.fillStyle=ink;sx.font='600 15px '+css('--f-display');sx.fillText('Eje P',gx-22,gy0-18);
+  ro[0].textContent=(a1*180/Math.PI).toFixed(1)+'°';ro[1].textContent=(a2*180/Math.PI).toFixed(1)+'°';ro[2].textContent=pz.toFixed(1)+' mm';
+}
+
+/* ---------- Simulador de protección ---------- */
+const pl=document.getElementById('plot'),px=pl.getContext('2d');
+const ia=document.getElementById('ia'),iav=document.getElementById('iav');
+const g={i:gi,v:gv,c:gc,s:gs,p:gp,en:gen,bs:bs,bp:bp,msg:simMsg};
+let target=1.6,cur=0,tS=0,tP=0,tripped=null,drvFault=false,hist=[],last=performance.now();
+const btns=[...document.querySelectorAll('[data-sc]')];
+function setTarget(v,btn){btns.forEach(b=>b.classList.toggle('on',b===btn));
+  if(v==='drv'){drvFault=true;return;} drvFault=false;target=+v;ia.value=v;iav.textContent=(+v).toFixed(1)+' A';}
+btns.forEach(b=>b.addEventListener('click',()=>setTarget(b.dataset.sc,b)));
+ia.addEventListener('input',()=>{btns.forEach(b=>b.classList.remove('on'));drvFault=false;target=+ia.value;iav.textContent=target.toFixed(1)+' A';});
+document.getElementById('rst').addEventListener('click',()=>{tripped=null;tS=tP=0;drvFault=false;setTarget(1.6,btns[0]);});
+function stepSim(now){
+  let dt=Math.min(50,now-last);last=now;
+  const goal=tripped?0:target;
+  cur+=(goal-cur)*Math.min(1,dt/60);
+  const noisy=Math.max(0,cur+(tripped?0:(Math.random()-.5)*0.12*Math.max(0.3,cur)));
+  if(!tripped){
+    if(drvFault){tripped='driver';}
+    tS=noisy>3?tS+dt:0; tP=noisy>4.5?tP+dt:0;
+    if(tP>=20)tripped='pico'; else if(tS>=500)tripped='sostenida';
+  }
+  hist.push(noisy);if(hist.length>180)hist.shift();
+  const vIS=drvFault&&tripped==='driver'?2.1:noisy/20000*470;
+  g.i.textContent=noisy.toFixed(2)+' A';
+  g.v.textContent=vIS>=1?vIS.toFixed(2)+' V':Math.round(vIS*1000)+' mV';
+  g.c.textContent=Math.round(vIS/3.3*4095);
+  g.s.textContent=Math.round(Math.min(tS,500))+' ms';g.p.textContent=Math.round(Math.min(tP,20))+' ms';
+  g.bs.style.width=Math.min(100,tS/5)+'%';g.bp.style.width=Math.min(100,tP*5)+'%';
+  g.en.className='led'+(tripped?' off':'');g.en.textContent=tripped?'Apagado':'Encendido';
+  const M={sostenida:'Corte por sobrecorriente sostenida: más de 3 A durante 500 ms. El EN queda apagado hasta el reset.',pico:'Corte inmediato por pico: más de 4.5 A durante 20 ms. El EN queda apagado hasta el reset.',driver:'El IFX007T reportó falla (sobretemperatura o corto): el pin IS saltó a unos 2.1 V. El STM32 apaga el EN.'};
+  if(tripped){g.msg.className='msg bad';g.msg.textContent=M[tripped];}
+  else if(noisy>3){g.msg.className='msg bad';g.msg.textContent='Sobre el umbral: el STM32 está contando el tiempo.';}
+  else{g.msg.className='msg';g.msg.textContent='Todo normal: la corriente está bajo los dos umbrales.';}
+  drawPlot();
+}
+function drawPlot(){
+  const W=pl.width,H=pl.height,pad=44,top=12,bot=26;
+  px.clearRect(0,0,W,H);
+  const y=a=>top+(H-top-bot)*(1-a/6);
+  px.font='12px '+css('--f-mono');px.fillStyle=css('--muted');px.strokeStyle=css('--line');px.lineWidth=1;
+  for(let a=0;a<=6;a++){px.beginPath();px.moveTo(pad,y(a));px.lineTo(W-8,y(a));px.stroke();px.fillText(a+' A',6,y(a)+4);}
+  px.fillText('últimos 3 s',W-90,H-6);
+  [[3,css('--warn'),'3 A · 500 ms'],[4.5,css('--bad'),'4.5 A · 20 ms']].forEach(([a,c,l])=>{px.strokeStyle=c;px.setLineDash([6,5]);px.lineWidth=1.6;px.beginPath();px.moveTo(pad,y(a));px.lineTo(W-8,y(a));px.stroke();px.setLineDash([]);px.fillStyle=c;px.fillText(l,pad+6,y(a)-6);});
+  if(hist.length<2)return;
+  const xs=i=>pad+(W-8-pad)*i/179;
+  const cu=css('--copper');
+  px.beginPath();hist.forEach((v,i)=>{const X=xs(i),Y=y(Math.min(6,v));i?px.lineTo(X,Y):px.moveTo(X,Y)});
+  px.lineTo(xs(hist.length-1),y(0));px.lineTo(xs(0),y(0));px.closePath();
+  px.globalAlpha=.15;px.fillStyle=cu;px.fill();px.globalAlpha=1;
+  px.beginPath();hist.forEach((v,i)=>{const X=xs(i),Y=y(Math.min(6,v));i?px.lineTo(X,Y):px.moveTo(X,Y)});
+  px.strokeStyle=cu;px.lineWidth=2.4;px.stroke();
+  const lx=xs(hist.length-1),ly=y(Math.min(6,hist[hist.length-1]));
+  px.fillStyle=cu;px.beginPath();px.arc(lx,ly,4.5,0,7);px.fill();
+}
+
+/* ---------- Máquina de estados ---------- */
+const FS={ARRANQUE:'La Pico inicializa pines, encoders y la comunicación con el STM32.',ESPERA:'Espera el Enter desde el PC para empezar a buscar el home.',HOME_R1:'Mueve R1 despacio hasta tocar su final de carrera de home (LIMIT1) y pone el cero.',HOME_R2:'Lo mismo con R2 y LIMIT3.',HOME_P:'Lo mismo con el eje P y LIMIT5.',LISTO:'En control: sigue los objetivos r1,r2,p que manda el PC.',QUIETO:'En control, pero el PC dejó de mandar objetivos y los ejes se quedan quietos. Vuelve a LISTO cuando llega un objetivo.',FALLA:'Un home falló o el STM32 cortó un eje. Hay que reiniciar.',SIN_PICO:'No lo pone la Pico: lo publica el STM32 cuando deja de recibir datos de ella.'};
+const seq=['ARRANQUE','ESPERA','HOME_R1','HOME_R2','HOME_P','LISTO','QUIETO','LISTO'];
+const sts=[...document.querySelectorAll('.st')],fi=document.getElementById('fsmInfo');
+let si=0,playing=!reduce,forced=null,lastStep=0;
+function show(s){sts.forEach(n=>n.classList.toggle('act',n.dataset.s===s));fi.innerHTML='<h3 class="mono">'+s+'</h3><p>'+FS[s]+'</p>';}
+sts.forEach(n=>{n.style.cursor='pointer';n.addEventListener('click',()=>{playing=false;playBtn.textContent='Reproducir';playBtn.classList.remove('on');show(n.dataset.s);});});
+const playBtn=document.getElementById('play');
+playBtn.textContent=playing?'Pausar':'Reproducir';playBtn.classList.toggle('on',playing);
+playBtn.addEventListener('click',()=>{playing=!playing;playBtn.textContent=playing?'Pausar':'Reproducir';playBtn.classList.toggle('on',playing);});
+document.getElementById('toFault').addEventListener('click',()=>{forced=['HOME_R2','FALLA'];playing=true;playBtn.textContent='Pausar';playBtn.classList.add('on');lastStep=0;});
+show(seq[0]);
+function stepFsm(now){
+  if(!playing||now-lastStep<1600)return;lastStep=now;
+  if(forced){show(forced.shift());if(!forced.length){forced=null;si=0;playing=false;playBtn.textContent='Reproducir';playBtn.classList.remove('on');}return;}
+  si=(si+1)%seq.length;show(seq[si]);
+}
+
+/* ---------- JSON ---------- */
+const jEl=document.getElementById('json');
+function hl(o){return JSON.stringify(o,null,1).replace(/("[^"]*")(\s*:)?|(-?\d+\.?\d*)|true|false/g,(m,s,c,n)=>s?(c?'<span class="jk">'+s+'</span>:':'<span class="js">'+s+'</span>'):n?'<span class="jn">'+n+'</span>':'<span class="jn">'+m+'</span>');}
+let up=1234,lastJ=0;
+function stepJson(now){
+  if(now-lastJ<500&&lastJ)return;lastJ=now;up+=0.5;
+  const t=now/1000;
+  const o={v:1,up:Math.floor(up),ciclo:'LISTO',pico_ok:true,temp:{pico:+(34.5+Math.sin(t/7)*0.4).toFixed(1),stm32:31.2},
+    ejes:[{n:'R1',est:'R',pos:+(0.51+0.2*Math.sin(t/2)).toFixed(3),u:+(3.2*Math.cos(t/2)).toFixed(2),i:+(1.2+0.15*Math.random()).toFixed(2),en:true,falla:'ninguna'},
+          {n:'P',est:'R',pos:+(35+10*Math.sin(t)).toFixed(2),u:-8,i:0.9,en:true,falla:'ninguna'}]};
+  jEl.innerHTML=hl(o).replace(/\n\s*\]/,'\n ]')+'\n<span style="color:var(--muted)">// R2 omitido para abreviar</span>';
+}
+
+/* ---------- Pestañas ---------- */
+const tabs=[...document.querySelectorAll('[role=tab]')],panels=[...document.querySelectorAll('.tabp')];
+let cur_t='inicio';
+function openTab(t,focus){
+  if(!tabs.some(b=>b.dataset.t===t))t='inicio';cur_t=t;
+  tabs.forEach(b=>{const on=b.dataset.t===t;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;if(on&&focus)b.focus();if(on)b.scrollIntoView({block:'nearest',inline:'nearest'});});
+  panels.forEach(p=>p.hidden=p.dataset.tab!==t);
+  try{localStorage.setItem('scara_tab',t)}catch(e){}
+  if(reduce)drawStatic();
+}
+tabs.forEach((b,i)=>{b.addEventListener('click',()=>{openTab(b.dataset.t);window.scrollTo({top:0})});
+  b.addEventListener('keydown',e=>{const d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(d){e.preventDefault();openTab(tabs[(i+d+tabs.length)%tabs.length].dataset.t,true);}});});
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{openTab(b.dataset.go);window.scrollTo({top:0})}));
+let start='inicio';const h=location.hash.slice(1);
+const map={robot:'robot',pc:'pc',pico:'pico',arquitectura:'pcb',pines:'pcb',pcb:'pcb',proteccion:'prot',prot:'prot',ciclo:'scada',mqtt:'scada',scada:'scada',estado:'estado'};
+if(map[h])start=map[h];else{try{start=localStorage.getItem('scara_tab')||'inicio'}catch(e){}}
+
+/* ---------- Cinemática inversa ---------- */
+const ikc=document.getElementById('ik'),ix=ikc.getContext('2d');
+const A1=125.053,A2=148.053,U2=122.55,SC=0.7,CX=220,CY=220;
+let tip={x:100,y:150};
+function ik(X,Y){const r=Math.hypot(X,Y);if(r>A1+A2||r<Math.abs(A1-A2))return null;
+  const cp=Math.max(-1,Math.min(1,(A1*A1+r*r-A2*A2)/(2*r*A1))),c2=Math.max(-1,Math.min(1,(r*r-A1*A1-A2*A2)/(2*A1*A2)));
+  return [Math.atan2(X,Y)-Math.acos(cp),Math.acos(c2)];}
+const P=(x,y)=>[CX+x*SC,CY-y*SC];
+function drawIK(){
+  const W=ikc.width,H=ikc.height;ix.clearRect(0,0,W,H);
+  ix.fillStyle=css('--pcb-soft');ix.beginPath();ix.arc(CX,CY,(A1+A2)*SC,0,7);ix.arc(CX,CY,(A2-A1)*SC,0,7,true);ix.fill();
+  ix.strokeStyle=css('--line');ix.lineWidth=1;ix.beginPath();ix.moveTo(CX,10);ix.lineTo(CX,H-10);ix.moveTo(10,CY);ix.lineTo(W-10,CY);ix.stroke();
+  ix.fillStyle=css('--muted');ix.font='12px '+css('--f-mono');ix.fillText('+Y',CX+6,22);ix.fillText('+X',W-30,CY-6);
+  const q=ik(tip.x,tip.y);const qe=document.getElementById('ikq'),se=document.getElementById('iks'),me=document.getElementById('ikm');
+  if(!q){qe.textContent='fuera de alcance';se.textContent='no se envía';me.className='msg bad';me.textContent='Fuera de alcance: p2p responde "Fuera de alcance" y no publica nada.';}
+  else{
+    const [q1,q2]=q;const e=[A1*Math.sin(q1),A1*Math.cos(q1)];
+    if(document.getElementById('ikU').checked){const t2=[e[0]+U2*Math.sin(q1+q2),e[1]+U2*Math.cos(q1+q2)];
+      ix.strokeStyle=css('--muted');ix.setLineDash([5,5]);ix.lineWidth=3;ix.beginPath();ix.moveTo(...P(...e));ix.lineTo(...P(...t2));ix.stroke();ix.setLineDash([]);
+      ix.fillStyle=css('--muted');ix.beginPath();ix.arc(...P(...t2),4,0,7);ix.fill();}
+    ix.lineCap='round';ix.strokeStyle=css('--signal');ix.lineWidth=12;ix.beginPath();ix.moveTo(CX,CY);ix.lineTo(...P(...e));ix.stroke();
+    ix.strokeStyle=css('--pcb');ix.lineWidth=9;ix.beginPath();ix.moveTo(...P(...e));ix.lineTo(...P(tip.x,tip.y));ix.stroke();
+    ix.fillStyle=css('--surface');ix.strokeStyle=css('--ink');ix.lineWidth=2;[[CX,CY],P(...e)].forEach(([x,y])=>{ix.beginPath();ix.arc(x,y,7,0,7);ix.fill();ix.stroke();});
+    const r1=q2,r2=-q1,bad=Math.abs(r1)>1.885||Math.abs(r2)>1.57;
+    qe.textContent='q1 = '+q1.toFixed(3)+', q2 = '+q2.toFixed(3)+' rad';se.textContent='r1 = '+r1.toFixed(3)+', r2 = '+r2.toFixed(3)+' rad';
+    me.className=bad?'msg bad':'msg';me.textContent=bad?'Pasa los límites de la Pico (R1 ±1.885, R2 ±1.57 rad): la Pico recortará el objetivo sin avisar.':'Dentro de los límites de la Pico.';
+  }
+  ix.fillStyle=css('--copper');ix.beginPath();ix.arc(...P(tip.x,tip.y),9,0,7);ix.fill();
+  ix.fillStyle=css('--ink');ix.font='12px '+css('--f-mono');ix.fillText('('+tip.x.toFixed(0)+', '+tip.y.toFixed(0)+') mm',P(tip.x,tip.y)[0]+12,P(tip.x,tip.y)[1]-10);
+}
+let drag=false;
+function mv(e){const r=ikc.getBoundingClientRect();const x=(e.clientX-r.left)*ikc.width/r.width,y=(e.clientY-r.top)*ikc.height/r.height;tip={x:(x-CX)/SC,y:(CY-y)/SC};drawIK();}
+ikc.addEventListener('pointerdown',e=>{drag=true;ikc.setPointerCapture(e.pointerId);mv(e)});
+ikc.addEventListener('pointermove',e=>{if(drag)mv(e)});
+ikc.addEventListener('pointerup',()=>drag=false);
+document.getElementById('ikU').addEventListener('change',drawIK);
+drawIK();
+
+/* ---------- Núcleos ---------- */
+const cc=document.getElementById('cores'),cx2=cc.getContext('2d');
+const c0=[];let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+for(let t=0;t<400;){const w=1.5+rnd()*5;c0.push([t,w,['poll_line','parse','printf','watchdog'][Math.floor(rnd()*4)]]);t+=w+rnd()*4;}
+function drawCores(now){
+  const W=cc.width,H=cc.height,L=110,pxms=9;const off=((now/1000)*25)%100;
+  cx2.clearRect(0,0,W,H);cx2.font='600 13px '+css('--f-mono');
+  cx2.fillStyle=css('--ink');cx2.fillText('Núcleo 1',8,48);cx2.fillText('Núcleo 0',8,108);
+  cx2.fillStyle=css('--muted');cx2.font='11px '+css('--f-mono');cx2.fillText('lazo fijo',8,64);cx2.fillText('sin tiempo fijo',8,124);
+  cx2.save();cx2.beginPath();cx2.rect(L,0,W-L,H);cx2.clip();
+  for(let k=-1;k<12;k++){const t=k*10-off%10,x=L+t*pxms;
+    cx2.strokeStyle=css('--line');cx2.beginPath();cx2.moveTo(x,20);cx2.lineTo(x,140);cx2.stroke();
+    cx2.fillStyle=css('--signal');cx2.fillRect(x,30,2.4*pxms,30);
+    cx2.fillStyle=css('--surface');cx2.font='600 11px '+css('--f-mono');cx2.fillText('R1 R2 P',x+3,49);}
+  c0.forEach(([t,w,n])=>{const tt=((t-off)%100+100)%100,x=L+tt*pxms;if(x>W)return;cx2.fillStyle=css('--copper-soft');cx2.strokeStyle=css('--copper');cx2.fillRect(x,90,w*pxms,30);cx2.strokeRect(x,90,w*pxms,30);
+    if(w*pxms>50){cx2.fillStyle=css('--copper');cx2.font='11px '+css('--f-mono');cx2.fillText(n,x+4,109);}});
+  cx2.restore();
+  cx2.fillStyle=css('--muted');cx2.font='11px '+css('--f-mono');cx2.fillText('una línea = 10 ms',W-130,14);
+}
+function drawStatic(){drawScara(t0+4000);drawCores(0);drawIK();drawPlot();}
+
+openTab(start);
+function frame(now){
+  if(cur_t==='robot')drawScara(now);
+  if(cur_t==='pico')drawCores(now);
+  stepSim(now);stepFsm(now);stepJson(now);requestAnimationFrame(frame);}
+if(reduce){drawStatic();stepJson(performance.now());setInterval(()=>{stepSim(performance.now())},100);}
+else requestAnimationFrame(frame);
+})();
+</script>

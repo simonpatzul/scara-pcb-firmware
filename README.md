@@ -6,7 +6,8 @@ Firmware del robot SCARA RRP para la PCB nueva (tarjeta de control + tarjeta de 
 |---|---|
 | `pico/` | Firmware de la Raspberry Pi Pico: control de los 3 ejes. Parte de [jer0valencia/SCARA_RRP_](https://github.com/jer0valencia/SCARA_RRP_) (commit a45484c), adaptado a la PCB |
 | `stm32/` | Firmware nuevo del STM32F030C8T6: protección de corriente, enables de los drivers y telemetría MQTT por el FC41D |
-| `docs/` | Análisis de los esquemáticos (`analisis_pcb.md`) y formato de los mensajes MQTT (`mqtt.md`) |
+| `scada/` | Página SCADA (`index.html`): se abre en el navegador y lee el MQTT del STM32 |
+| `docs/` | Análisis de los esquemáticos (`analisis_pcb.md`), formato de los mensajes MQTT (`mqtt.md`) y documentación general (`documentacion_scara.html`) |
 
 El lado del PC (ROS 2) sigue en [jer0valencia/SCARA_RRP](https://github.com/jer0valencia/SCARA_RRP) y funciona sin cambios: el protocolo serie es el mismo.
 
@@ -82,3 +83,12 @@ Las pruebas de la lógica de protección y del JSON corren en el PC: `make -C st
 - **Servo y bomba:** comparten slice PWM y por eso los dos trabajan a 50 Hz. Para la bomba alcanza (prendida, apagada o a media potencia).
 - **Resolución de la corriente:** con R_IS = 470 Ω, 1 A da unas 29 cuentas del ADC. Alcanza para proteger, pero no para medir con precisión. En falla, el pin IS llega a unos 2.1 V, dentro del rango del STM32.
 - **Comandos AT del FC41D** (`stm32/src/fc41d.c`): siguen el manual de Quectel (`AT+QSTAAPINFO`, `AT+QMTOPEN`, `AT+QMTCONN`, `AT+QMTPUB`), pero no se probaron con el módulo real. Si no conecta, hay que revisar las respuestas en el monitor serie del módulo y ajustar las cadenas.
+
+## Subirlo a GitHub
+
+Crea un repo vacío en GitHub (sin README ni .gitignore) y, desde esta carpeta:
+
+```
+git remote add origin https://github.com/simonpatzul/<nombre-del-repo>.git
+git push -u origin main
+```
