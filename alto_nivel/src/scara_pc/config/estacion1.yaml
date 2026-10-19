@@ -1,0 +1,38 @@
+# Posiciones de la Estación 1 (mm y grados). Se miden con el robot: mover con teleop hasta cada punto
+# y leer /scara/joint_states, o medir x, y desde la base con la misma convención que ik.py.
+# Hasta que estén medidas, datos_listos se queda en false y el nodo no mueve el robot.
+estacion1:
+  ros__parameters:
+    datos_listos: false
+
+    # Pila: centro de la pila y p de la tarjeta de arriba. Cada tarjeta siguiente está grosor_tarjeta más abajo.
+    pila_x: 0.0
+    pila_y: 200.0
+    p_pila_primera: 60.0
+    grosor_tarjeta: 1.6
+    # Orientación de cada tarjeta en la pila, de arriba hacia abajo (grados)
+    orientaciones_pila: [0.0, 90.0, 0.0, 90.0]
+
+    # Bandeja: centro de cada uno de los 4 lugares y p para dejar la tarjeta
+    bandeja_x: [100.0, 150.0, 100.0, 150.0]
+    bandeja_y: [150.0, 150.0, 100.0, 100.0]
+    p_bandeja: 60.0
+    # Orientación en la que H1 queda abajo a la izquierda (grados, misma referencia que orientaciones_pila)
+    orientacion_bandeja: 0.0
+
+    # Altura para moverse entre la pila y la bandeja sin chocar
+    p_seguro: 10.0
+    # +1 si al subir el ángulo del servo la tarjeta gira en el mismo sentido que el brazo (q1 + q2); si no, -1
+    servo_signo: 1.0
+
+    # Tiempos (s) y tolerancias para dar un punto por alcanzado
+    t_vacio: 0.5
+    t_soltar: 0.5
+    t_servo: 0.4
+    tolerancia_rad: 0.02
+    tolerancia_mm: 1.0
+    t_movimiento_max: 10.0
+
+    # Broker para mandar la secuencia a la SCADA (topic scara/est1)
+    mqtt_host: broker.hivemq.com
+    mqtt_port: 1883

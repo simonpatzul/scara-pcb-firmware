@@ -2,7 +2,7 @@
 
 El STM32 publica por el módulo Wi-Fi FC41D. Los datos de la Pico (ciclo, posiciones, voltajes, temperatura) llegan al STM32 por I2C y salen en el mismo mensaje.
 
-- **Broker por defecto:** `broker.hivemq.com`, puerto 1883 (TCP, sin usuario). Es público, sirve solo para pruebas. Se cambia en `stm32/inc/wifi_config.h`.
+- **Broker por defecto:** `broker.hivemq.com`, puerto 1883 (TCP, sin usuario). Es público, sirve solo para pruebas. Se cambia en `bajo_nivel/stm32/inc/wifi_config.h`.
 - **Desde un navegador:** el mismo broker acepta WebSocket en `wss://broker.hivemq.com:8884/mqtt`.
 - **Prefijo de topics:** `scara/` (configurable). Para no mezclarse con otros usuarios del broker público, conviene cambiarlo por algo único, p. ej. `scara-simon/`.
 
@@ -67,3 +67,13 @@ Se publica cuando un eje entra en falla o cuando se borra una falla.
 ```
 
 `falla: "ninguna"` significa que la falla de ese eje se borró.
+
+## `scara/est1` (lo publica el PC)
+
+La secuencia de la Estación 1 (`alto_nivel/.../estacion1.py`) publica su estado cada segundo y en cada cambio de fase, con `retain`:
+
+```json
+{ "tarjeta": 2, "fase": "BANDEJA", "vacio": 1, "colocadas": 1, "t_ciclo": 12.8, "t_ultimo": 34.5, "ciclos": 3 }
+```
+
+`fase` es `PILA`, `BAJAR_PILA`, `VACIO`, `SUBIR_PILA`, `CORREGIR`, `BANDEJA`, `BAJAR_BANDEJA`, `SOLTAR`, `SUBIR_BANDEJA` o `ESPERA_PILA`; `tarjeta` es `null` entre ciclos.

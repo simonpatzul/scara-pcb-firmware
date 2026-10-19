@@ -1,5 +1,5 @@
 # Puente PC <-> Pico. Es el ÚNICO nodo que toca el puerto serie.
-#   Escucha  /scara/target        (Float64MultiArray: [r1 rad, r2 rad, p mm])
+#   Escucha  /scara/target        (Float64MultiArray: [r1 rad, r2 rad, p mm] o [r1, r2, p, servo grados, bomba 0..1])
 #   Publica  /scara/joint_states  (JointState: posiciones medidas, mismas unidades)
 # Manda el último objetivo a la Pico a tasa fija, así su watchdog nunca se dispara
 # mientras este nodo esté vivo. Si el nodo muere o se desconecta el USB, la Pico se queda quieta.
@@ -22,6 +22,7 @@ class Bridge(Node):
         self.home()
 
         self.target = [0.0, 0.0, 0.0]   # después del home los tres ejes quedan en 0
+        self.tool = None                # [servo, bomba]; None = la Pico recibe solo 3 campos, como antes
         self.pub = self.create_publisher(JointState, '/scara/joint_states', 10)
         self.create_subscription(Float64MultiArray, '/scara/target', self.on_target, 10)
         self.create_timer(1.0 / rate, self.tick)
@@ -41,10 +42,17 @@ class Bridge(Node):
     def on_target(self, msg):
         if len(msg.data) == 3:
             self.target = list(msg.data)
+        elif len(msg.data) == 5:
+            self.target = list(msg.data[:3])
+            self.tool = list(msg.data[3:])
 
     def tick(self):
         r1, r2, p = self.target
-        self.ser.write(f'{r1:.4f},{r2:.4f},{p:.3f}\n'.encode())
+        if self.tool is None:
+            self.ser.write(f'{r1:.4f},{r2:.4f},{p:.3f}\n'.encode())
+        else:
+            servo, bomba = self.tool
+            self.ser.write(f'{r1:.4f},{r2:.4f},{p:.3f},{servo:.1f},{bomba:.2f}\n'.encode())
 
         # Leer todas las respuestas que hayan llegado y quedarse con la última válida
         last = None

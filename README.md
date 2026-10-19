@@ -1,20 +1,19 @@
-# SCARA RRP · firmware para la PCB
+# SCARA RRP · software del robot con la PCB nueva
 
-Firmware del robot SCARA RRP para la PCB nueva (tarjeta de control + tarjeta de potencia). Reemplaza la versión que corría en la baquelita.
+Software del robot SCARA RRP para la PCB nueva (tarjeta de control + tarjeta de potencia). Reemplaza la versión que corría en la baquelita. Hay una carpeta por dispositivo:
 
-| Carpeta | Qué hay |
-|---|---|
-| `pico/` | Firmware de la Raspberry Pi Pico: control de los 3 ejes. Parte de [jer0valencia/SCARA_RRP_](https://github.com/jer0valencia/SCARA_RRP_) (commit a45484c), adaptado a la PCB |
-| `stm32/` | Firmware nuevo del STM32F030C8T6: protección de corriente, enables de los drivers y telemetría MQTT por el FC41D |
-| `scada/` | Página SCADA (`index.html`): se abre en el navegador y lee el MQTT del STM32 |
-| `docs/` | Análisis de los esquemáticos (`analisis_pcb.md`), formato de los mensajes MQTT (`mqtt.md`) y documentación general (`documentacion_scara.html`) |
-
-El lado del PC (ROS 2) sigue en [jer0valencia/SCARA_RRP](https://github.com/jer0valencia/SCARA_RRP) y funciona sin cambios: el protocolo serie es el mismo.
+| Carpeta | Dispositivo | Qué hay |
+|---|---|---|
+| `alto_nivel/` | PC con ROS 2 | Workspace de ROS 2: bridge serie, teleop, punto a punto, URDF y la secuencia de la Estación 1 (pick & place). Parte de [jer0valencia/SCARA_RRP](https://github.com/jer0valencia/SCARA_RRP) (commit 26dd87b). Ver [`alto_nivel/README.md`](alto_nivel/README.md) |
+| `bajo_nivel/pico/` | Raspberry Pi Pico | Control de los 3 ejes, servo y bomba. Parte de [jer0valencia/SCARA_RRP_](https://github.com/jer0valencia/SCARA_RRP_) (commit a45484c), adaptado a la PCB |
+| `bajo_nivel/stm32/` | STM32F030C8T6 | Protección de corriente, enables de los drivers y telemetría MQTT por el FC41D |
+| `scada/` | Navegador | Página SCADA (`index.html`): lee el MQTT del STM32 y del PC |
+| `docs/` | — | Análisis de los esquemáticos (`analisis_pcb.md`), formato de los mensajes MQTT (`mqtt.md`) y documentación general (`documentacion_scara.html`) |
 
 ## Cómo encaja todo
 
 ```
- PC (ROS 2, bridge.py) --USB serie "r1,r2,p"--> Pico ---PWM INA/INB---> IFX007T x6 ---> motores
+ PC (ROS 2, bridge.py) --USB serie "r1,r2,p[,servo,bomba]"--> Pico ---PWM INA/INB---> IFX007T x6 ---> motores
                                                  |                         ^ INH (EN)    | IS (corriente)
                                                  |  I2C (latido 20 ms)     |             v
                                                  +----------------------> STM32 <--------+
@@ -47,7 +46,7 @@ Además:
 **Pico** (necesita el [Pico SDK](https://github.com/raspberrypi/pico-sdk) y `PICO_SDK_PATH`):
 
 ```
-cd pico && mkdir build && cd build
+cd bajo_nivel/pico && mkdir build && cd build
 cmake .. && make -j4
 ```
 
@@ -56,13 +55,13 @@ Salen dos archivos: `scara_fw.uf2` (firmware) y `scara_prueba.uf2` (prueba de ej
 **STM32** (necesita `arm-none-eabi-gcc`; para grabar, un ST-Link en el conector SWD J1):
 
 ```
-cd stm32
+cd bajo_nivel/stm32
 cp inc/wifi_config.example.h inc/wifi_config.h   # y poner la red Wi-Fi y el broker
 make
 make flash          # o grabar build/proteccion.bin con STM32CubeProgrammer en 0x08000000
 ```
 
-Las pruebas de la lógica de protección y del JSON corren en el PC: `make -C stm32/test`.
+Las pruebas de la lógica de protección y del JSON corren en el PC: `make -C bajo_nivel/stm32/test`.
 
 ## Primera vez en la PCB: orden recomendado
 
@@ -70,11 +69,11 @@ Las pruebas de la lógica de protección y del JSON corren en el PC: `make -C st
 2. **Grabar `scara_prueba.uf2`** en la Pico y abrir el monitor serie (115200). Debe decir `STM32: OK`.
 3. **Probar cada eje** con 12 V conectados y el robot sin carga:
    - Con `1`, `2` y `3` se elige el eje; con `+` y `-` se sube o se baja el voltaje de a 1 V; con `0` se para.
-   - Con voltaje **positivo**, la articulación debe **aumentar**. Si disminuye, hay que cambiar el signo de `encoder_sign` de ese eje en `pico/config/axis_config.h`.
+   - Con voltaje **positivo**, la articulación debe **aumentar**. Si disminuye, hay que cambiar el signo de `encoder_sign` de ese eje en `bajo_nivel/pico/config/axis_config.h`.
    - Con el voltaje del mismo signo que `home_volts` (negativo), el eje debe ir hacia el final de carrera de **home**.
    - Hay que apretar cada final de carrera con la mano y comprobar que cambie `home=` / `fin=`.
    - Con el eje frenado con la mano, la corriente debe subir y el STM32 debe cortar pasados los 3 A.
-4. **Medir la corriente real una vez** con un multímetro o una pinza amperimétrica y compararla con la que reporta el STM32. Si no coinciden, ajustar `K_ILIS` en `stm32/inc/config.h`. El datasheet del IFX007T da 19 500 como típico, con 15 000–24 000 de rango (±23 %).
+4. **Medir la corriente real una vez** con un multímetro o una pinza amperimétrica y compararla con la que reporta el STM32. Si no coinciden, ajustar `K_ILIS` en `bajo_nivel/stm32/inc/config.h`. El datasheet del IFX007T da 19 500 como típico, con 15 000–24 000 de rango (±23 %).
 5. **Grabar `scara_fw.uf2`** y hacer el home como antes.
 
 ## Cosas del hardware a tener en cuenta
@@ -83,13 +82,4 @@ Las pruebas de la lógica de protección y del JSON corren en el PC: `make -C st
 - **Servo y bomba:** comparten slice PWM y por eso los dos trabajan a 50 Hz. Para la bomba alcanza (prendida, apagada o a media potencia).
 - **Resolución de la corriente:** con R_IS = 470 Ω, 1 A da unas 30 cuentas del ADC. Alcanza para proteger, pero no para medir con precisión. En falla, el pin IS llega a 1.93–2.87 V, dentro del rango del STM32.
 - **Offset del IS:** cada IFX007T suma entre 30 y 385 µA de offset, y solo con el EN encendido; con el EN apagado el IS da 0. Por eso el STM32 no calibra el cero al arrancar: lo aprende mientras el motor trabaja, de los momentos en que ese medio puente no conduce (ver `protection.c`).
-- **Comandos AT del FC41D** (`stm32/src/fc41d.c`): siguen el manual AT V1.0 del FC41D (`AT+QSTAAPINFO` sin comillas, `AT+QMTCFG`, `AT+QMTOPEN`, `AT+QMTCONN`, `AT+QMTPUBRAW` para el JSON), pero no se probaron con el módulo real. Si no conecta, hay que revisar las respuestas en el monitor serie del módulo y ajustar las cadenas.
-
-## Subirlo a GitHub
-
-Crea un repo vacío en GitHub (sin README ni .gitignore) y, desde esta carpeta:
-
-```
-git remote add origin https://github.com/simonpatzul/<nombre-del-repo>.git
-git push -u origin main
-```
+- **Comandos AT del FC41D** (`bajo_nivel/stm32/src/fc41d.c`): siguen el manual AT V1.0 del FC41D (`AT+QSTAAPINFO` sin comillas, `AT+QMTCFG`, `AT+QMTOPEN`, `AT+QMTCONN`, `AT+QMTPUBRAW` para el JSON), pero no se probaron con el módulo real. Si no conecta, hay que revisar las respuestas en el monitor serie del módulo y ajustar las cadenas.

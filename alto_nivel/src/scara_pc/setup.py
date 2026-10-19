@@ -1,3 +1,4 @@
+from glob import glob
 from setuptools import setup
 
 setup(
@@ -7,6 +8,8 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/scara_pc']),
         ('share/scara_pc', ['package.xml']),
+        ('share/scara_pc/config', glob('config/*.yaml')),
+        ('share/scara_pc/launch', glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     entry_points={
@@ -15,6 +18,7 @@ setup(
             'bridge = scara_pc.bridge:main',
             'teleop = scara_pc.teleop:main',
             'p2p = scara_pc.p2p:main',
+            'estacion1 = scara_pc.estacion1:main',
         ],
     },
 )
