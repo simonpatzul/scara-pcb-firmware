@@ -14,14 +14,15 @@ struct AxisConfig {
     float gear_ratio;          // rad del motor por unidad de la articulación: 3.0 en R1/R2 (3:1), pi en P (rad/mm, tornillo de 2 mm)
     float encoder_sign;        // +1 o -1. Debe quedar tal que voltaje POSITIVO => ángulo que AUMENTA
 
-    // Driver (puente H)
-    uint8_t pwm_l, pwm_r;      // PWM de cada sentido (misma pareja PWM)
-    uint8_t en_l, en_r;        // enable de cada mitad del puente
+    // Driver (dos medios puentes IFX007T). El EN (INH) no lo maneja la Pico: lo enciende el STM32
+    // de protección cuando la Pico se lo pide por I2C (ver stm32_link.h)
+    uint8_t pwm_l, pwm_r;      // PWM de cada sentido: M*_INA / M*_INB (misma pareja PWM)
     float supply_volts;        // voltaje de la fuente del motor
     float max_duty;            // tope del PWM, de 0 a 1. También satura al controlador (u_max = max_duty * supply_volts)
 
-    // Final de carrera (uno solo, el de home)
-    uint8_t limit_pin;
+    // Finales de carrera: dos por eje, en orden LIMIT1..LIMIT6 = GP17..GP22
+    uint8_t limit_home_pin;    // el de home (hacia donde empuja home_volts)
+    uint8_t limit_end_pin;     // el del otro extremo
     bool limit_active_low;     // true si el interruptor conecta el pin a GND al activarse
 
     // Home
@@ -49,10 +50,20 @@ constexpr RstParams RST_R1 = {
     0.002378
 };
 
-//                              name  encA encB sm  cuentas  ratio  sign  pwmL pwmR enL enR  volts  maxDuty  limite activeLow  homeV  objetivo timeout   rst      min   max
-constexpr AxisConfig AXIS_R1 = { "R1", 11, 10, 0, 3200.0f, 3.0f, -1.0f,  6,   7,   5,  4, 12.0f, 0.50f,    21,    true,   -3.5f,  1.83f, 15000, &RST_R1, -1.885f, 1.885f };
-constexpr AxisConfig AXIS_R2 = { "R2", 12, 13, 1, 3200.0f, 3.0f, 1.0f,  14,  15,  17, 16, 12.0f, 0.50f,    20,    true,   -3.5f,  1.48f, 15000, &RST_R1, -1.57f, 1.57f };
+// Pines de la PCB (MCU.SchDoc): M1 = R1, M2 = R2, M3 = P.
+//   M1_INA/INB GP0/GP1   M2_INA/INB GP2/GP3   M3_INA/INB GP6/GP7
+//   ENC1 GP10/GP11       ENC2 GP12/GP13       ENC3 GP14/GP15     (A/B, ya pasados a 3.3 V por el SN74LVC8T245)
+//   LIMIT1/2 GP17/GP18   LIMIT3/4 GP19/GP20   LIMIT5/6 GP21/GP22 (activos en bajo, pull-up de 10k en la placa)
+//
+// VERIFICAR antes de cerrar el lazo, con el programa scara_prueba (ver README):
+//   - encoder_sign: R1 pasó de -1 a +1 porque en la PCB ENC1_A quedó en GP10 (en la baquelita estaba en GP11).
+//     Si el motor quedó conectado al revés en los bornes, el signo vuelve a cambiar.
+//   - pwmL/pwmR de P siguen cruzados como en la baquelita (voltaje positivo = subir).
+//
+//                              name  encA encB sm  cuentas  ratio  sign  pwmL pwmR  volts  maxDuty  home end activeLow  homeV  objetivo timeout   rst      min   max
+constexpr AxisConfig AXIS_R1 = { "R1", 10, 11, 0, 3200.0f, 3.0f,  1.0f,  0,   1,  12.0f, 0.50f,    17,  18,   true,   -3.5f,  1.83f, 15000, &RST_R1, -1.885f, 1.885f };
+constexpr AxisConfig AXIS_R2 = { "R2", 12, 13, 1, 3200.0f, 3.0f,  1.0f,  2,   3,  12.0f, 0.50f,    19,  20,   true,   -3.5f,  1.48f, 15000, &RST_R1, -1.57f, 1.57f };
 
-// Prismático: sus "rad" son mm (0 = suelo, positivo hacia arriba). Límite abajo, en el suelo.
-// pwmL/pwmR van cruzados (1, 0) para que voltaje positivo = subir.
-constexpr AxisConfig AXIS_P  = { "P",   8,  9, 2, 3200.0f, 3.14159265f, -1.0f, 1, 0, 2,  3, 12.0f, 1.00f,    19,    true,   -8.0f,  0.0f,  30000, &RST_R1, 0.0f, 85.0f };
+// Prismático: sus "rad" son mm (0 = suelo, positivo hacia arriba). Límite de home abajo, en el suelo.
+// pwmL/pwmR van cruzados (7, 6) para que voltaje positivo = subir.
+constexpr AxisConfig AXIS_P  = { "P",  14, 15, 2, 3200.0f, 3.14159265f, -1.0f, 7, 6, 12.0f, 1.00f,   21,  22,   true,   -8.0f,  0.0f,  30000, &RST_R1, 0.0f, 85.0f };

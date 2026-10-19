@@ -21,24 +21,34 @@ public:
     void start_homing() { home_request_ = true; }
     void set_target_rad(float rad);   // ángulo objetivo de la articulación, recortado al rango permitido
 
+    void trip() { trip_request_ = true; }   // el STM32 cortó este motor: el eje pasa a Fault
+
     // Lecturas (seguras desde cualquier núcleo)
-    AxisState state() const { return home_request_ ? AxisState::Homing : state_; }
+    AxisState state() const {
+        if (trip_request_) return AxisState::Fault;
+        return home_request_ ? AxisState::Homing : state_;
+    }
     HomingPhase homing_phase() const { return phase_; }
-    bool limit() const { return limit_.pressed(); }
+    bool limit() const { return limit_.pressed(); }        // final de carrera de home
+    bool end_limit() const { return end_.pressed(); }      // final de carrera del otro extremo
+    bool wants_enable() const { return driver_.enabled(); } // lo que hay que pedirle al STM32
     float position_rad() const { return position_rad_; }   // ángulo de la articulación
     float target_rad() const { return target_rad_; }
-    float voltage() const { return u_volts_; }              // última salida del RST, en voltios
+    float voltage() const { return u_volts_; }              // último voltaje mandado al motor (RST o home)
     const char* name() const { return cfg_.name; }
 
 private:
     void begin_homing();
     void homing_step();
     void zero_here();   // el punto actual pasa a ser 0 y empieza la fase GoTo
+    void drive(float volts);   // manda un voltaje al motor y lo guarda para la telemetría
+    void stop_fault();  // PWM a 0, deja de pedir el EN y queda en Fault
 
     const AxisConfig& cfg_;
     Encoder encoder_;
     MotorDriver driver_;
     LimitSwitch limit_;
+    LimitSwitch end_;
     RstController rst_;
 
     // Solo los usa el núcleo 1
@@ -56,4 +66,5 @@ private:
 
     // Lo escribe el núcleo 0 (pide) y lo borra el núcleo 1 (atiende)
     volatile bool home_request_ = false;
+    volatile bool trip_request_ = false;   // lo escribe el núcleo 0; el núcleo 1 lo atiende y queda en Fault
 };
