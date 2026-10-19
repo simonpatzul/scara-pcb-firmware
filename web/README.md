@@ -1,9 +1,9 @@
-# Web · página SCADA
+# Web · SCADA de la Estación 1
 
 | Carpeta | Qué hay |
 |---|---|
-| `frontend/` | La página (`index.html`). Funciona sola: se abre en el navegador y lee el broker MQTT por WebSocket. Ver `frontend/LEEME.md` |
-| `backend/` | Servidor en Python (FastAPI). Se suscribe al broker, guarda el historial en SQLite (`scada.db`) y sirve la página |
+| `frontend/` | La página (`index.html`). Se puede abrir sola con doble clic (modo demo o conexión directa al broker por WebSocket). Ver `frontend/LEEME.md` |
+| `backend/` | Servidor en Python (FastAPI). Escucha el broker por TCP, guarda fallas y tiempos de ciclo en SQLite (`scada.db`), sirve la página y le pasa los datos en vivo |
 
 ## Correr el backend
 
@@ -15,18 +15,25 @@ pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-Después se abre http://localhost:8000 (la página) o http://localhost:8000/docs (la API).
+Después abre http://localhost:8000. Desde ahí la página se conecta sola al servidor (arriba dice "Servidor · broker OK"). En http://localhost:8000/docs está la API.
 
-Variables de entorno opcionales: `MQTT_HOST` (por defecto `broker.hivemq.com`), `MQTT_PORT` (1883), `MQTT_PREFIX` (`scara`, el mismo que en el STM32), `DB_PATH` y `MUESTRA_S` (cada cuánto se guarda una muestra, 2 s).
+Variables de entorno opcionales:
+
+| Variable | Por defecto | Para qué |
+|---|---|---|
+| `MQTT_HOST` / `MQTT_PORT` | `broker.hivemq.com` / `1883` | broker |
+| `MQTT_USER` / `MQTT_PASS` | vacío | si el broker pide usuario |
+| `SCARA_PREFIJO` | `scara` | el mismo prefijo del STM32 y de ROS 2 |
+| `SCADA_DB` | `backend/scada.db` | archivo del historial |
 
 ## API
 
 | Ruta | Qué devuelve |
 |---|---|
-| `GET /api/estado` | último `scara/estado` y `scara/est1`, con cuántos segundos tienen |
-| `GET /api/eventos?n=50` | últimas fallas (`scara/evento`) |
-| `GET /api/ciclos?n=50` | últimos ciclos de la Estación 1, el promedio y cuántos quedaron dentro de 20–50 s |
-| `GET /api/historial?min=10` | muestras de los últimos minutos: corriente, voltaje y posición de cada eje y temperaturas |
-| `WS /ws` | en vivo: `{"topic": "estado" \| "evento" \| "est1", "data": {...}}` |
+| `GET /api/salud` | broker, prefijo, si está conectado y cuándo llegó el último mensaje de cada topic |
+| `GET /api/actual` | último `scara/estado` y `scara/est1` |
+| `GET /api/eventos?limite=50` | últimas fallas (`scara/evento`) |
+| `GET /api/ciclos?limite=50` | últimos ciclos terminados de la estación (duración en s) |
+| `GET /api/stream` | en vivo, Server-Sent Events: `broker`, `estado`, `evento`, `est1` |
 
-Los formatos de los mensajes están en [`docs/mqtt.md`](../docs/mqtt.md).
+Topics que escucha: `<prefijo>/estado` y `<prefijo>/evento` (STM32) y `<prefijo>/est1` (PC, ROS 2). Los formatos están en `docs/` del repo.

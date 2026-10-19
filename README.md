@@ -7,7 +7,7 @@ Software del robot SCARA RRP para la PCB nueva (tarjeta de control + tarjeta de 
 | `alto_nivel/` | PC con ROS 2 | Workspace de ROS 2: bridge serie, teleop, punto a punto, URDF y la secuencia de la Estación 1 (pick & place). Parte de [jer0valencia/SCARA_RRP](https://github.com/jer0valencia/SCARA_RRP) (commit 26dd87b). Ver [`alto_nivel/README.md`](alto_nivel/README.md) |
 | `bajo_nivel/pico/` | Raspberry Pi Pico | Control de los 3 ejes, servo y bomba. Parte de [jer0valencia/SCARA_RRP_](https://github.com/jer0valencia/SCARA_RRP_) (commit a45484c), adaptado a la PCB |
 | `bajo_nivel/stm32/` | STM32F030C8T6 | Protección de corriente, enables de los drivers y telemetría MQTT por el FC41D |
-| `web/` | PC o servidor | Página SCADA: `frontend/` (la página) y `backend/` (servidor con historial). Ver [`web/README.md`](web/README.md) |
+| `web/` | PC o servidor | Página SCADA: `frontend/` (la página) y `backend/` (servidor que guarda fallas y ciclos y le pasa los datos en vivo). Ver [`web/README.md`](web/README.md) |
 | `docs/` | — | Análisis de los esquemáticos (`analisis_pcb.md`), formato de los mensajes MQTT (`mqtt.md`) y documentación general (`documentacion_scara.html`) |
 
 ## Cómo encaja todo

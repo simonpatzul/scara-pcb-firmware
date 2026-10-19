@@ -267,10 +267,11 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
         <label><span class="lbl">Clave (opcional)</span><input id="inPass" type="password" autocomplete="off"></label>
         <div style="display:flex; gap:8px; flex-wrap:wrap">
           <button type="submit" class="primary">Conectar</button>
+          <button type="button" id="btnServ">Usar servidor</button>
           <button type="button" id="btnDemo">Modo demo</button>
         </div>
       </form>
-      <p class="note">La página escucha <span class="num">&lt;prefijo&gt;/estado</span> (cada 500 ms) y <span class="num">&lt;prefijo&gt;/evento</span> (fallas), formato v1. El prefijo tiene que ser el mismo de <span class="num">stm32/inc/wifi_config.h</span>; en el broker público conviene uno único, por ejemplo <span class="num">scara-simon</span>. El panel de la estación usa el campo <span class="num">est1</span>. Es una página de solo lectura: no manda comandos al robot.</p>
+      <p class="note">Si la página se abre desde el backend (<span class="num">web/backend</span>), se conecta sola al servidor, que ya escucha el broker por TCP y guarda el historial. Sin servidor, la conexión directa escucha <span class="num">&lt;prefijo&gt;/estado</span> (cada 500 ms) y <span class="num">&lt;prefijo&gt;/evento</span> (fallas) del STM32, y <span class="num">&lt;prefijo&gt;/est1</span> (secuencia de la estación) que publica el PC con ROS 2. El prefijo tiene que ser el mismo de <span class="num">stm32/inc/wifi_config.h</span>; en el broker público conviene uno único, por ejemplo <span class="num">scara-simon</span>. Es una página de solo lectura: no manda comandos al robot.</p>
     </div>
   </section>
 
@@ -324,7 +325,7 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
         <header><h2>Secuencia por tarjeta</h2><span class="tag" id="seqTag">—</span></header>
         <div class="body">
           <ol class="seq" id="seq"></ol>
-          <div class="nodata" id="seqNo" hidden>El firmware todavía no envía el campo <span class="num">est1</span> con la tarjeta y la fase. El resto de la página funciona igual.</div>
+          <div class="nodata" id="seqNo" hidden>No llega <span class="num">scara/est1</span> desde el PC (ROS 2), así que no hay tarjeta ni fase. El resto de la página funciona igual.</div>
         </div>
       </section>
       <div class="mini">
@@ -562,8 +563,16 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
     const enControl = /^(HOME_|LISTO|QUIETO)/.test(d.ciclo || "");
     if (enControl && d.pico_ok !== false && S.loopQuieto >= 3) alarma("loop", "todos", "El lazo de control de la Pico dejó de avanzar", `loop ${d.loop}`, 1); else normalizar("loop");
     if (d.vdda != null && (d.vdda < CFG.VDDA_MIN || d.vdda > CFG.VDDA_MAX)) alarma("vdda", "—", "Alimentación de 3.3 V fuera de rango", `${fmt(d.vdda, 2)} V`, 2); else normalizar("vdda");
-    // Estación: tiempo del ciclo terminado dentro de la ventana
-    const st = d.est1;
+    procesarEst1(d.est1 ?? S.est1msg);
+    render();
+  }
+  // est1 llega en su propio topic (lo publica el PC con ROS 2); también se acepta dentro de scara/estado
+  function onEst1(st) {
+    if (!st || typeof st !== "object") return;
+    S.est1msg = st; procesarEst1(st);
+    if (S.last) render(); else renderEstacion(st);
+  }
+  function procesarEst1(st) {
     if (st && typeof st.t_ultimo === "number" && st.t_ultimo > 0 && st.t_ultimo !== S.ultimoVisto) {
       S.tiempos.push(st.t_ultimo); if (S.tiempos.length > 50) S.tiempos.shift();
       if (!enVentana(st.t_ultimo)) alarma("tciclo", "E1", `Ciclo fuera de la ventana ${CFG.T_MIN}–${CFG.T_MAX} s`, `${fmt(st.t_ultimo)} s`, 2);
@@ -572,7 +581,6 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
     }
     if (st && typeof st.t_ciclo === "number" && st.t_ciclo > CFG.T_MAX && faseIdx(st.fase) >= 0)
       alarma("tciclo", "E1", `Ciclo pasado de ${CFG.T_MAX} s`, `${fmt(st.t_ciclo)} s`, 2);
-    render();
   }
   function onEvento(ev) {
     if (!ev || !ev.eje || !ev.falla) return;
@@ -630,7 +638,7 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
       chip($("st" + e), mal ? "alarm" : a.en ? "ok" : "", mal ? "Falla" : !a.en ? "EN apagado" : Math.abs(u) > 0.3 ? "Moviendo" : (EST[a.est] || "—"));
       S.view[e].tpos = pos;
     });
-    renderEstacion(d.est1);
+    renderEstacion(d.est1 ?? S.est1msg);
     renderAlarmas(); renderResumen(); tick();
   }
 
@@ -686,6 +694,7 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
     const cc = $("chipConn");
     if (S.modo === "demo") chip(cc, "warn", "Demo · datos simulados");
     else if (S.modo === "mqtt") chip(cc, S.mqttOk ? "ok" : "alarm", S.mqttOk ? "MQTT conectado" : "MQTT desconectado");
+    else if (S.modo === "servidor") chip(cc, S.mqttOk && S.brokerOk ? "ok" : "alarm", !S.mqttOk ? "Servidor sin conexión" : S.brokerOk ? "Servidor · broker OK" : "Servidor · sin broker");
     else chip(cc, "", "Sin conexión");
     $("btnFault").hidden = S.modo !== "demo";
     const lk = (id, ok, txt) => { const el = $(id); setCls(el, "ok", ok === true); setCls(el, "bad", ok === false); $(id + "t").textContent = txt; };
@@ -695,10 +704,11 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
       lk("lkI2C", stale ? null : picoOk, stale ? "?" : picoOk ? "latido OK" : "sin latido");
       lk("lkUart", !stale, stale ? `sin datos ${dur(age)}` : "2 datos/s");
     }
-    lk("lkWeb", S.modo === "demo" ? true : S.modo === "mqtt" ? S.mqttOk : null, S.modo === "demo" ? "simulado" : S.modo === "mqtt" ? (S.mqttOk ? "conectado" : "sin conexión") : "—");
-    const v = $("verdict"), activas = S.alarmas.filter((a) => a.estado === "activa"), st = d && d.est1;
+    const webOk = S.modo === "demo" ? true : S.modo === "mqtt" ? S.mqttOk : S.modo === "servidor" ? S.mqttOk && S.brokerOk : null;
+    lk("lkWeb", webOk, S.modo === "demo" ? "simulado" : S.modo === "servidor" ? (webOk ? "vía servidor" : "sin conexión") : S.modo === "mqtt" ? (S.mqttOk ? "conectado" : "sin conexión") : "—");
+    const v = $("verdict"), activas = S.alarmas.filter((a) => a.estado === "activa"), st = d && (d.est1 ?? S.est1msg);
     let cls = "ok", big = "En operación", sub = "Comunicación, temperaturas y corrientes dentro de rango.";
-    if (!d) { cls = ""; big = "Esperando datos"; sub = S.modo === "mqtt" ? "Conectado al broker, todavía no llega scara/estado. Revisa el prefijo." : "Conéctate al broker o usa el modo demo."; }
+    if (!d) { cls = ""; big = "Esperando datos"; sub = S.modo === "servidor" ? (S.brokerOk ? "El servidor está conectado al broker, todavía no llega scara/estado. Revisa el prefijo." : "El servidor no logra conectarse al broker.") : S.modo === "mqtt" ? "Conectado al broker, todavía no llega scara/estado. Revisa el prefijo." : "Conéctate al broker o usa el modo demo."; }
     else if (stale) { cls = "warn"; big = "Sin datos"; sub = `El último dato llegó hace ${dur(age)}. Revisa el FC41D y el Wi-Fi.`; }
     else if (activas.some((a) => a.prio === 1) || d.ciclo === "FALLA" || d.ciclo === "SIN_PICO") { cls = "alarm"; big = "Estación en falla"; sub = activas[0] ? `${activas[0].eje}: ${activas[0].tipo}` : CICLO_TXT[d.ciclo]; }
     else if (activas.length) { cls = "warn"; big = "Aviso activo"; sub = `${activas[0].eje}: ${activas[0].tipo}`; }
@@ -813,7 +823,39 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
 
   // ---------- MQTT ----------
   let client = null;
-  function desconectar() { if (client) { try { client.end(true); } catch {} client = null; } S.mqttOk = false; }
+  let fuente = null;
+  function desconectar() {
+    if (client) { try { client.end(true); } catch {} client = null; }
+    if (fuente) { fuente.close(); fuente = null; }
+    S.mqttOk = false; S.brokerOk = false;
+  }
+  // Modo servidor: el backend escucha el broker y reenvía por Server-Sent Events
+  function conectarServidor() {
+    pararDemo(); desconectar(); limpiar();
+    S.modo = "servidor"; $("connState").textContent = "Servidor";
+    fuente = new EventSource("api/stream");
+    fuente.onopen = () => { S.mqttOk = true; renderResumen(); };
+    fuente.onerror = () => { S.mqttOk = false; renderResumen(); };
+    const js = (fn) => (ev) => { try { fn(JSON.parse(ev.data)); } catch {} };
+    fuente.addEventListener("broker", js((b) => { S.brokerOk = !!b.broker_ok; renderResumen(); }));
+    fuente.addEventListener("estado", js(onEstado));
+    fuente.addEventListener("evento", js(onEvento));
+    fuente.addEventListener("est1", js(onEst1));
+    fetch("api/ciclos?limite=50").then((r) => r.json()).then((c) => {
+      if (!Array.isArray(c)) return;
+      S.tiempos = c.map((x) => x.duracion).filter((x) => typeof x === "number").reverse().concat(S.tiempos).slice(-50);
+      if (S.est) renderEstacion(S.est);
+    }).catch(() => {});
+  }
+  async function hayServidor() {
+    if (!/^https?:$/.test(location.protocol)) return false;
+    try {
+      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 1500);
+      const r = await fetch("api/salud", { cache: "no-store", signal: ctl.signal }); clearTimeout(to);
+      if (!r.ok) return false;
+      const j = await r.json(); return j && "broker_ok" in j;
+    } catch { return false; }
+  }
   function conectar(cfg) {
     pararDemo(); desconectar(); limpiar();
     S.modo = "mqtt"; renderResumen();
@@ -822,18 +864,18 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
     $("connState").textContent = "Conectando…";
     client = window.mqtt.connect(cfg.url, { clientId: "scada-" + Math.random().toString(16).slice(2, 10), reconnectPeriod: 3000, connectTimeout: 8000,
       username: cfg.user || undefined, password: cfg.pass || undefined, clean: true });
-    client.on("connect", () => { S.mqttOk = true; $("connState").textContent = "Conectado"; client.subscribe([`${pre}/estado`, `${pre}/evento`], { qos: 1 }); renderResumen(); });
+    client.on("connect", () => { S.mqttOk = true; $("connState").textContent = "Conectado"; client.subscribe([`${pre}/estado`, `${pre}/evento`, `${pre}/est1`], { qos: 1 }); renderResumen(); });
     client.on("reconnect", () => { $("connState").textContent = "Reintentando…"; });
     client.on("close", () => { S.mqttOk = false; renderResumen(); });
     client.on("error", (e) => { $("connState").innerHTML = `<span class="err">Error: ${String(e && e.message || e).replace(/</g, "&lt;")}</span>`; });
     client.on("message", (topic, buf) => {
       let j; try { j = JSON.parse(buf.toString()); } catch { return; }
       const sub = topic.slice(pre.length + 1);
-      if (sub === "estado") onEstado(j); else if (sub === "evento") onEvento(j);
+      if (sub === "estado") onEstado(j); else if (sub === "evento") onEvento(j); else if (sub === "est1") onEst1(j);
     });
   }
   function limpiar() {
-    Object.assign(S, { last: null, lastAt: 0, ciclo: null, alarmas: [], prevLoop: null, loopRate: null, loopQuieto: 0, tiempos: [], ultimoVisto: null, est: null });
+    Object.assign(S, { last: null, lastAt: 0, ciclo: null, alarmas: [], prevLoop: null, loopRate: null, loopQuieto: 0, tiempos: [], ultimoVisto: null, est: null, est1msg: null });
     EJES.forEach((e) => (S.hist[e] = []));
     renderEstacion(null); renderAlarmas(); renderResumen();
   }
@@ -924,7 +966,7 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
       vdda: +(3.31 + (Math.random() - 0.5) * 0.02).toFixed(2),
       ejes: EJES.map((e) => { const a = ax[e];
         return { n: e, est: a.est, pos: +(e === "P" ? a.pos : (a.pos * Math.PI) / 180).toFixed(e === "P" ? 2 : 3), u: +a.u.toFixed(2), i: +a.i.toFixed(2), en: a.en, lim: a.lim, falla: a.falla }; }),
-      est1: enProceso ? { tarjeta: SIM.tarjeta || null, fase: SIM.fase, vacio: SIM.vacio, colocadas: SIM.colocadas,
+      _est1: enProceso ? { tarjeta: SIM.tarjeta || null, fase: SIM.fase, vacio: SIM.vacio, colocadas: SIM.colocadas,
         t_ciclo: +SIM.tCiclo.toFixed(1), t_ultimo: SIM.tUltimo, ciclos: SIM.ciclos } : undefined,
     };
   }
@@ -933,14 +975,19 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
     pararDemo(); desconectar(); limpiar(); SIM.fallaPend = false; simInit();
     S.modo = "demo"; $("connState").textContent = "";
     let acc = 0;
-    simTimer = setInterval(() => { simPaso(0.1); acc += 100; if (acc >= CFG.PERIODO_MS) { acc = 0; onEstado(simEstado()); } }, 100);
-    onEstado(simEstado());
+    simTimer = setInterval(() => { simPaso(0.1); acc += 100; if (acc >= CFG.PERIODO_MS) { acc = 0; enviarSim(); } }, 100);
+    enviarSim();
   }
+  function enviarSim() { const e = simEstado(), st = e._est1; delete e._est1; onEst1(st || { tarjeta: null, fase: null }); onEstado(e); } // como el robot real: est1 en su propio topic
   function pararDemo() { clearInterval(simTimer); simTimer = 0; }
 
   // ---------- Controles ----------
   $("btnConnToggle").addEventListener("click", () => { $("connPanel").hidden = !$("connPanel").hidden; });
   $("btnDemo").addEventListener("click", () => { demo(); $("connPanel").hidden = true; });
+  $("btnServ").addEventListener("click", async () => {
+    if (await hayServidor()) { conectarServidor(); $("connPanel").hidden = true; }
+    else $("connState").innerHTML = `<span class="err">No hay servidor: abre la página desde el backend (uvicorn en web/backend).</span>`;
+  });
   $("btnFault").addEventListener("click", () => {
     if (S.modo !== "demo") return;
     if (SIM.ciclo === "LISTO" && SIM.fase !== "ESPERA_PILA") { SIM.fallaEje = "R2"; SIM.fallaT = 0; } else SIM.fallaPend = true;
@@ -954,7 +1001,8 @@ input { font: 14px var(--f-data); color: var(--ink); background: var(--well); bo
   setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("es", { hour12: false }); renderResumen(); }, 500);
 
   renderEstacion(null); drawArm(); renderAlarmas();
-  demo(); // abre funcionando con datos simulados; "Conexión" para pasar al robot real
+  // Desde el backend se conecta sola al servidor; abierta como archivo o sin servidor, arranca en demo
+  hayServidor().then((ok) => (ok ? conectarServidor() : demo()));
 })();
 </script>
 </body>

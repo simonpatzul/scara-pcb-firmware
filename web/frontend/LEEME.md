@@ -1,6 +1,6 @@
 # Página SCADA · Estación 1 (Pick & Place de PCB)
 
-`index.html` es la HMI de la estación. No necesita instalar nada: se abre con doble clic en el navegador (necesita internet para la librería MQTT y las fuentes).
+`index.html` es la HMI de la estación. Lo normal es abrirla desde el backend (ver `../README.md`): http://localhost:8000. También se puede abrir con doble clic en el navegador (necesita internet para la librería MQTT y las fuentes).
 
 1. Abre `index.html`. Arranca en **modo demo**: simula el ciclo completo (pila en cruz → 4 tarjetas corregidas en la bandeja, unos 34 s).
 2. Pulsa **Conexión**, revisa el broker (`wss://broker.hivemq.com:8884/mqtt`) y pon el mismo prefijo que tiene el STM32 en `stm32/inc/wifi_config.h` (por defecto `scara`).
@@ -10,10 +10,10 @@ Es solo de lectura: no manda comandos al robot. Los rangos de los ejes, el patr�
 
 ## Campo `est1` (panel de la estación)
 
-Para que la secuencia, la pila, la bandeja y el tiempo de ciclo se vean con el robot real, `scara/estado` tiene que traer este objeto. Sin él, el resto de la página funciona igual.
+Lo publica el PC (ROS 2) en su propio topic `<prefijo>/est1`, con retain. La página también lo acepta dentro de `scara/estado`. Sin él, el resto de la página funciona igual.
 
 ```json
-"est1": { "tarjeta": 2, "fase": "BANDEJA", "vacio": 1, "colocadas": 1, "t_ciclo": 12.8, "t_ultimo": 34.5, "ciclos": 3 }
+{ "tarjeta": 2, "fase": "BANDEJA", "vacio": 1, "colocadas": 1, "t_ciclo": 12.8, "t_ultimo": 34.5, "ciclos": 3 }
 ```
 
 | Campo | Significado |

@@ -1,181 +1,202 @@
-# Backend de la página SCADA.
-# Se suscribe al broker MQTT (lo que publican el STM32 y el PC), guarda el historial en SQLite y lo entrega
-# a la página por HTTP y WebSocket. También sirve el frontend (../frontend).
-#
-#   GET /api/estado           último scara/estado y scara/est1, con su antigüedad en segundos
-#   GET /api/eventos?n=50     últimas fallas (scara/evento)
-#   GET /api/ciclos?n=50      últimos ciclos de la Estación 1 y su resumen (promedio, dentro de 20–50 s)
-#   GET /api/historial?min=10 muestras cada 2 s: corriente, voltaje y posición de cada eje y temperaturas
-#   WS  /ws                   en vivo: {"topic": "estado" | "evento" | "est1", "data": {...}}
-#
-# Configuración por variables de entorno: MQTT_HOST, MQTT_PORT, MQTT_PREFIX, DB_PATH, MUESTRA_S.
+"""Backend del SCADA de la Estación 1 (SCARA RRP, Grupo 7-G).
+
+Se suscribe al broker MQTT por TCP, guarda las fallas y los tiempos de ciclo en SQLite,
+sirve la página (../frontend) y le pasa los mensajes en vivo por Server-Sent Events.
+
+Ejecutar:  uvicorn app:app --host 0.0.0.0 --port 8000   (desde web/backend)
+"""
 import asyncio
-import contextlib
 import json
 import os
 import sqlite3
 import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-MQTT_HOST = os.environ.get('MQTT_HOST', 'broker.hivemq.com')
-MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
-PREFIX = os.environ.get('MQTT_PREFIX', 'scara')
-DB_PATH = os.environ.get('DB_PATH', str(Path(__file__).with_name('scada.db')))
-MUESTRA_S = float(os.environ.get('MUESTRA_S', '2'))   # cada cuánto se guarda una muestra de scara/estado
-T_MIN, T_MAX = 20.0, 50.0                              # ventana de tiempo de ciclo de la estación
-FRONTEND = Path(__file__).resolve().parent.parent / 'frontend'
+# ---------- Configuración (variables de entorno) ----------
+MQTT_HOST = os.getenv("MQTT_HOST", "broker.hivemq.com")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USER = os.getenv("MQTT_USER") or None
+MQTT_PASS = os.getenv("MQTT_PASS") or None
+PREFIJO = os.getenv("SCARA_PREFIJO", "scara").rstrip("/")
+DB_PATH = Path(os.getenv("SCADA_DB", Path(__file__).with_name("scada.db")))
+FRONTEND = Path(os.getenv("SCADA_FRONTEND", Path(__file__).resolve().parent.parent / "frontend"))
 
-
-# ---------- Base de datos ----------
-db = sqlite3.connect(DB_PATH, check_same_thread=False)
-db_lock = threading.Lock()
-db.executescript('''
-CREATE TABLE IF NOT EXISTS muestras (ts REAL, ciclo TEXT, temp_pico REAL, temp_stm32 REAL,
-    i1 REAL, i2 REAL, i3 REAL, u1 REAL, u2 REAL, u3 REAL, pos1 REAL, pos2 REAL, pos3 REAL);
-CREATE TABLE IF NOT EXISTS eventos (ts REAL, eje TEXT, falla TEXT, i REAL);
-CREATE TABLE IF NOT EXISTS ciclos (ts REAL, duracion REAL);
-CREATE INDEX IF NOT EXISTS muestras_ts ON muestras (ts);
-''')
+TOPICS = {"estado": f"{PREFIJO}/estado", "evento": f"{PREFIJO}/evento", "est1": f"{PREFIJO}/est1"}
 
 
-def sql(query, args=()):
-    with db_lock:
-        cur = db.execute(query, args)
-        db.commit()
-        return cur.fetchall()
+# ---------- Persistencia ----------
+class Historial:
+    def __init__(self, path: Path):
+        self.db = sqlite3.connect(path, check_same_thread=False)
+        self.lock = threading.Lock()
+        with self.lock:
+            self.db.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS eventos (ts REAL, eje TEXT, falla TEXT, i REAL, up INTEGER);
+                CREATE TABLE IF NOT EXISTS ciclos  (ts REAL, duracion REAL, n INTEGER);
+                """
+            )
+
+    def evento(self, ev: dict):
+        with self.lock:
+            self.db.execute("INSERT INTO eventos VALUES (?,?,?,?,?)",
+                            (time.time(), ev.get("eje"), ev.get("falla"), ev.get("i"), ev.get("up")))
+            self.db.commit()
+
+    def ciclo(self, duracion: float, n):
+        with self.lock:
+            self.db.execute("INSERT INTO ciclos VALUES (?,?,?)", (time.time(), duracion, n))
+            self.db.commit()
+
+    def leer(self, tabla: str, limite: int):
+        cols = {"eventos": ("ts", "eje", "falla", "i", "up"), "ciclos": ("ts", "duracion", "n")}[tabla]
+        with self.lock:
+            filas = self.db.execute(f"SELECT {','.join(cols)} FROM {tabla} ORDER BY ts DESC LIMIT ?", (limite,)).fetchall()
+        return [dict(zip(cols, f)) for f in filas]
 
 
-# ---------- Estado en memoria y clientes WebSocket ----------
-ultimo = {'estado': None, 'est1': None}
-recibido = {'estado': 0.0, 'est1': 0.0}
-ultima_muestra = 0.0
-ultimos_ciclos = None
-clientes: set[WebSocket] = set()
-loop: asyncio.AbstractEventLoop | None = None
+# ---------- Puente MQTT → clientes SSE ----------
+class Puente:
+    def __init__(self, hist: Historial):
+        self.hist = hist
+        self.ultimo = {k: None for k in TOPICS}   # último mensaje de cada topic
+        self.recibido = {k: None for k in TOPICS}  # hora (epoch) en que llegó
+        self.broker_ok = False
+        self.ultimo_ciclo = None
+        self.clientes: set[asyncio.Queue] = set()
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.cli = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"scada-backend-{os.getpid()}")
+        if MQTT_USER:
+            self.cli.username_pw_set(MQTT_USER, MQTT_PASS)
+        self.cli.on_connect = self._on_connect
+        self.cli.on_disconnect = self._on_disconnect
+        self.cli.on_message = self._on_message
+        self.cli.reconnect_delay_set(1, 10)
 
+    def arrancar(self, loop):
+        self.loop = loop
+        self.cli.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
+        self.cli.loop_start()
 
-async def difundir(msg: str):
-    for ws in list(clientes):
+    def parar(self):
+        self.cli.loop_stop()
+        self.cli.disconnect()
+
+    # Callbacks del hilo de paho
+    def _on_connect(self, cli, _ud, _flags, rc, _props=None):
+        self.broker_ok = not rc.is_failure
+        if self.broker_ok:
+            cli.subscribe([(TOPICS["estado"], 0), (TOPICS["evento"], 1), (TOPICS["est1"], 1)])
+        self._emitir("broker", self.salud())
+
+    def _on_disconnect(self, *_args):
+        self.broker_ok = False
+        self._emitir("broker", self.salud())
+
+    def _on_message(self, _cli, _ud, msg):
+        tipo = next((k for k, t in TOPICS.items() if t == msg.topic), None)
+        if tipo is None:
+            return
         try:
-            await ws.send_text(msg)
-        except Exception:
-            clientes.discard(ws)
+            datos = json.loads(msg.payload)
+        except ValueError:
+            return
+        self.ultimo[tipo] = datos
+        self.recibido[tipo] = time.time()
+        if tipo == "evento":
+            self.hist.evento(datos)
+        if tipo == "est1" or (tipo == "estado" and isinstance(datos.get("est1"), dict)):
+            st = datos if tipo == "est1" else datos["est1"]
+            dur = st.get("t_ultimo")
+            if isinstance(dur, (int, float)) and dur > 0 and dur != self.ultimo_ciclo:
+                if not msg.retain:  # un retain es un ciclo viejo que ya se guardó
+                    self.hist.ciclo(dur, st.get("ciclos"))
+                self.ultimo_ciclo = dur
+        self._emitir(tipo, datos)
+
+    def _emitir(self, tipo, datos):
+        if not self.loop:
+            return
+        linea = f"event: {tipo}\ndata: {json.dumps(datos, separators=(',', ':'))}\n\n"
+        for q in list(self.clientes):
+            self.loop.call_soon_threadsafe(self._poner, q, linea)
+
+    @staticmethod
+    def _poner(q: asyncio.Queue, linea: str):
+        if q.full():  # cliente lento: se descarta lo más viejo
+            q.get_nowait()
+        q.put_nowait(linea)
+
+    def salud(self):
+        return {"broker": f"{MQTT_HOST}:{MQTT_PORT}", "prefijo": PREFIJO, "broker_ok": self.broker_ok,
+                "recibido": self.recibido, "clientes": len(self.clientes)}
 
 
-def on_message(_client, _userdata, m):
-    global ultima_muestra, ultimos_ciclos
-    topic = m.topic[len(PREFIX) + 1:]
-    try:
-        data = json.loads(m.payload)
-    except ValueError:
-        return
-    ahora = time.time()
-
-    if topic == 'estado':
-        ultimo['estado'], recibido['estado'] = data, ahora
-        if ahora - ultima_muestra >= MUESTRA_S:
-            ultima_muestra = ahora
-            ejes = (data.get('ejes') or []) + [{}] * 3
-            temp = data.get('temp') or {}
-            sql('INSERT INTO muestras VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                (ahora, data.get('ciclo'), temp.get('pico'), temp.get('stm32'),
-                 *(e.get('i') for e in ejes[:3]), *(e.get('u') for e in ejes[:3]), *(e.get('pos') for e in ejes[:3])))
-    elif topic == 'evento':
-        sql('INSERT INTO eventos VALUES (?,?,?,?)', (ahora, data.get('eje'), data.get('falla'), data.get('i')))
-    elif topic == 'est1':
-        ultimo['est1'], recibido['est1'] = data, ahora
-        n = data.get('ciclos')
-        # Un ciclo nuevo terminó cuando sube el contador (el primer mensaje solo fija la referencia)
-        if isinstance(n, int) and ultimos_ciclos is not None and n > ultimos_ciclos and data.get('t_ultimo'):
-            sql('INSERT INTO ciclos VALUES (?,?)', (ahora, data['t_ultimo']))
-        if isinstance(n, int):
-            ultimos_ciclos = n
-    else:
-        return
-
-    if loop is not None:
-        msg = json.dumps({'topic': topic, 'data': data})
-        asyncio.run_coroutine_threadsafe(difundir(msg), loop)
+hist = Historial(DB_PATH)
+puente = Puente(hist)
 
 
-def iniciar_mqtt():
-    try:
-        c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)   # paho 2.x
-    except AttributeError:
-        c = mqtt.Client()                                    # paho 1.x
-    c.on_connect = lambda cl, *_: cl.subscribe([(f'{PREFIX}/estado', 0), (f'{PREFIX}/evento', 1), (f'{PREFIX}/est1', 0)])
-    c.on_message = on_message
-    c.reconnect_delay_set(1, 30)
-    c.connect_async(MQTT_HOST, MQTT_PORT)
-    c.loop_start()
-    return c
-
-
-# ---------- API ----------
-@contextlib.asynccontextmanager
-async def lifespan(_app):
-    global loop
-    loop = asyncio.get_running_loop()
-    cliente = iniciar_mqtt()
+@asynccontextmanager
+async def vida(_app):
+    puente.arrancar(asyncio.get_running_loop())
     yield
-    cliente.loop_stop()
+    puente.parar()
 
 
-app = FastAPI(title='SCADA SCARA', lifespan=lifespan)
+app = FastAPI(title="SCADA Estación 1", lifespan=vida)
 
 
-@app.get('/api/estado')
-def api_estado():
-    ahora = time.time()
-    edad = lambda k: round(ahora - recibido[k], 1) if recibido[k] else None
-    return {'estado': ultimo['estado'], 'est1': ultimo['est1'],
-            'edad_estado': edad('estado'), 'edad_est1': edad('est1'), 'broker': f'{MQTT_HOST}:{MQTT_PORT}'}
+@app.get("/api/salud")
+def api_salud():
+    return puente.salud()
 
 
-@app.get('/api/eventos')
-def api_eventos(n: int = 50):
-    rows = sql('SELECT ts, eje, falla, i FROM eventos ORDER BY ts DESC LIMIT ?', (n,))
-    return [{'ts': r[0], 'eje': r[1], 'falla': r[2], 'i': r[3]} for r in rows]
+@app.get("/api/actual")
+def api_actual():
+    return {"estado": puente.ultimo["estado"], "est1": puente.ultimo["est1"], "recibido": puente.recibido}
 
 
-@app.get('/api/ciclos')
-def api_ciclos(n: int = 50):
-    rows = sql('SELECT ts, duracion FROM ciclos ORDER BY ts DESC LIMIT ?', (n,))
-    dur = [r[1] for r in rows]
-    return {
-        'ciclos': [{'ts': r[0], 'duracion': r[1], 'en_ventana': T_MIN <= r[1] <= T_MAX} for r in rows],
-        'promedio': round(sum(dur) / len(dur), 1) if dur else None,
-        'en_ventana': sum(T_MIN <= d <= T_MAX for d in dur),
-        'total': len(dur),
-    }
+@app.get("/api/eventos")
+def api_eventos(limite: int = 50):
+    return hist.leer("eventos", max(1, min(limite, 500)))
 
 
-@app.get('/api/historial')
-def api_historial(min: float = 10):
-    rows = sql('SELECT * FROM muestras WHERE ts >= ? ORDER BY ts', (time.time() - min * 60,))
-    cols = ['ts', 'ciclo', 'temp_pico', 'temp_stm32', 'i1', 'i2', 'i3', 'u1', 'u2', 'u3', 'pos1', 'pos2', 'pos3']
-    return [dict(zip(cols, r)) for r in rows]
+@app.get("/api/ciclos")
+def api_ciclos(limite: int = 50):
+    return hist.leer("ciclos", max(1, min(limite, 500)))
 
 
-@app.websocket('/ws')
-async def ws(websocket: WebSocket):
-    await websocket.accept()
-    clientes.add(websocket)
-    # Al conectarse, mandar lo último que se tiene para no esperar al próximo mensaje
-    for topic in ('estado', 'est1'):
-        if ultimo[topic] is not None:
-            await websocket.send_text(json.dumps({'topic': topic, 'data': ultimo[topic]}))
-    try:
-        while True:
-            await websocket.receive_text()   # la página no manda comandos; esto solo detecta el cierre
-    except WebSocketDisconnect:
-        clientes.discard(websocket)
+@app.get("/api/stream")
+async def api_stream(request: Request):
+    q: asyncio.Queue = asyncio.Queue(maxsize=200)
+    puente.clientes.add(q)
+
+    async def flujo():
+        try:
+            yield f"event: broker\ndata: {json.dumps(puente.salud())}\n\n"
+            for tipo in ("est1", "estado"):  # estado inicial para que la página no arranque vacía
+                if puente.ultimo[tipo] is not None:
+                    yield f"event: {tipo}\ndata: {json.dumps(puente.ultimo[tipo])}\n\n"
+            while not await request.is_disconnected():
+                try:
+                    yield await asyncio.wait_for(q.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            puente.clientes.discard(q)
+
+    return StreamingResponse(flujo(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
-if FRONTEND.is_dir():
-    app.mount('/', StaticFiles(directory=FRONTEND, html=True), name='frontend')
+@app.get("/")
+def index():
+    pagina = FRONTEND / "index.html"
+    if not pagina.exists():
+        return JSONResponse({"error": f"No se encontró {pagina}"}, status_code=500)
+    return FileResponse(pagina)
