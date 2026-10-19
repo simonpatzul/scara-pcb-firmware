@@ -63,7 +63,7 @@ static bool starts(const char* prefix) { return strncmp(line, prefix, strlen(pre
 
 // ---------- Máquina de estados ----------
 typedef enum {
-    S_POWER_OFF, S_BOOT, S_ECHO_OFF, S_WIFI, S_WIFI_WAIT_IP, S_MQTT_OPEN, S_MQTT_CONN,
+    S_POWER_OFF, S_BOOT, S_ECHO_OFF, S_WIFI, S_WIFI_WAIT_IP, S_MQTT_CFG, S_MQTT_OPEN, S_MQTT_CONN,
     S_READY, S_PUB_PROMPT, S_PUB_DONE, S_RETRY_WAIT
 } State;
 
@@ -102,8 +102,9 @@ bool fc41d_publish(const char* topic, const char* payload, int qos) {
     pub_qos = qos;
     pub_id = pub_id % 65535 + 1;
     prompt = false;
-    // QoS 0 exige msgID = 0
-    snprintf(cmd, sizeof(cmd), "AT+QMTPUB=0,%u,%d,0,\"%s\",%d\r\n", qos ? pub_id : 0, qos, pub_topic, n);
+    // QMTPUBRAW: el módulo responde '>' y después recibe el mensaje tal cual (el JSON lleva comillas,
+    // que en AT+QMTPUB irían dentro de otra cadena). QoS 0 exige msgID = 0
+    snprintf(cmd, sizeof(cmd), "AT+QMTPUBRAW=0,%u,%d,0,\"%s\",%d\r\n", qos ? pub_id : 0, qos, pub_topic, n);
     uart_puts(cmd);
     go(S_PUB_PROMPT);
     return true;
@@ -116,7 +117,7 @@ void fc41d_poll(void) {
     if (got && starts("+QMTSTAT:")) { retry(); return; }   // el broker cerró la conexión
 
     switch (st) {
-    case S_POWER_OFF:
+    case S_POWER_OFF:   // CEN es un reset activo en bajo: hay que tenerlo abajo al menos 100 ms
         fc41d_power(false);
         if (elapsed() > 200) { fc41d_power(true); go(S_BOOT); }
         break;
@@ -127,7 +128,8 @@ void fc41d_poll(void) {
 
     case S_ECHO_OFF:
         if (got && starts("OK")) {
-            snprintf(cmd, sizeof(cmd), "AT+QSTAAPINFO=\"%s\",\"%s\"\r\n", WIFI_SSID, WIFI_PASS);
+            // Según el manual del FC41D, SSID y clave van sin comillas
+            snprintf(cmd, sizeof(cmd), "AT+QSTAAPINFO=%s,%s\r\n", WIFI_SSID, WIFI_PASS);
             uart_puts(cmd);
             go(S_WIFI);
         } else if (elapsed() > 1000) retry();
@@ -138,9 +140,16 @@ void fc41d_poll(void) {
         else if ((got && starts("ERROR")) || elapsed() > 15000) retry();
         break;
 
-    case S_WIFI_WAIT_IP:   // espera el aviso de IP; si no llega con ese texto, igual intenta el broker
+    case S_WIFI_WAIT_IP:   // espera +QSTASTAT:"GOT_IP"; si no llega con ese texto, igual intenta el broker
         if ((got && strstr(line, "GOT_IP")) || elapsed() > 8000) {
             wifi_ok = true;
+            uart_puts("AT+QMTCFG=\"version\",0,4\r\n");   // MQTT 3.1.1
+            go(S_MQTT_CFG);
+        }
+        break;
+
+    case S_MQTT_CFG:
+        if ((got && (starts("OK") || starts("ERROR"))) || elapsed() > 1000) {
             snprintf(cmd, sizeof(cmd), "AT+QMTOPEN=0,\"%s\",%d\r\n", MQTT_HOST, MQTT_PORT);
             uart_puts(cmd);
             go(S_MQTT_OPEN);
@@ -178,7 +187,7 @@ void fc41d_poll(void) {
         break;
 
     case S_PUB_DONE:
-        if (got && starts("+QMTPUB: 0,")) {
+        if (got && (starts("+QMTPUB: 0,") || starts("+QMTPUBRAW: 0,"))) {
             // +QMTPUB: 0,<msgID>,<result>  result 0 = enviado
             const char* last = strrchr(line, ',');
             if (last && last[1] == '0') { fails = 0; go(S_READY); }

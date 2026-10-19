@@ -2,9 +2,9 @@
 // Módulo Wi-Fi Quectel FC41D por USART1 con comandos AT: conexión al Wi-Fi y publicación MQTT.
 // Todo es no bloqueante: fc41d_poll() avanza una máquina de estados desde el bucle principal.
 //
-// IMPORTANTE: la sintaxis de los comandos (AT+QSTAAPINFO, AT+QMTOPEN, AT+QMTCONN, AT+QMTPUB) sigue el
-// manual de AT de Quectel, pero no se pudo probar con un módulo real. Si algo no responde como se espera,
-// revisar el "AT Commands Manual" del FC41D y ajustar las cadenas en fc41d.c.
+// Los comandos (AT+QSTAAPINFO, AT+QMTCFG, AT+QMTOPEN, AT+QMTCONN, AT+QMTPUBRAW) siguen el manual AT V1.0
+// del FC41D, pero no se probaron con un módulo real. Si algo no responde como se espera, mirar las
+// respuestas en el UART del módulo y ajustar las cadenas en fc41d.c.
 #include <stdbool.h>
 
 void fc41d_init(void);

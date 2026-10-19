@@ -3,6 +3,7 @@
 #include <string.h>
 #include <assert.h>
 #include "board.h"
+#include "config.h"
 #include "shared.h"
 #include "protection.h"
 #include "telemetry.h"
@@ -25,29 +26,55 @@ static void fill(int ch, int off, int on, float duty) {
 static void run(int ms) { for (int i = 0; i < ms; ++i) { ms_ticks++; protection_tick(); } }
 static void heartbeat(uint8_t en, int ms) { for (int i = 0; i < ms; ++i) { if (i % 20 == 0) protection_on_control(en); run(1); } }
 
+// Cuentas del ADC para una corriente de motor (A) según config.h
+static int amps(float a) { return (int)(a / K_ILIS * R_IS_OHM * 1000.0f / (3300.0f / 4095.0f) + 0.5f); }
+
+// Telemetría de la Pico: voltaje mandado a cada motor (mV); también la marca como reciente
+static void pico_volts(int16_t u0, int16_t u1, int16_t u2) {
+    put16(REG_PICO_VOLT, u0); put16(REG_PICO_VOLT + 2, u1); put16(REG_PICO_VOLT + 4, u2);
+    pico_last_block_ms = ms_ticks;
+}
+
 int main(void) {
-    const int OFS = 20;   // offset del ADC en reposo
-    for (int c = 0; c < NUM_ADC_CH; ++c) fill(c, OFS, OFS, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    const int OFS = 99;   // offset típico del IS con el EN encendido (170 uA x 470 ohm)
+    for (int c = 0; c < NUM_ADC_CH; ++c) fill(c, 0, 0, 0);   // con el EN apagado el IS da 0
     protection_init();
 
-    // 1. Durante la calibración no se enciende nada aunque la Pico lo pida
-    heartbeat(0x07, 100);
+    // 1. Durante el arranque no se enciende nada aunque la Pico lo pida
+    heartbeat(0x07, 30);
     assert(!en_pin[0] && !en_pin[1] && !en_pin[2]);
-    heartbeat(0x07, 200);
+    heartbeat(0x07, 40);
     assert(en_pin[0] && en_pin[1] && en_pin[2]);
     assert(regs[REG_STATUS] & 0x08);
-    printf("ok  calibracion y enable\n");
+    printf("ok  arranque y enable\n");
 
-    // 2. 2 A en M1 (≈58 cuentas) con PWM al 50 %: no corta, y reporta ~2 A
-    fill(0, OFS, OFS + 58, 0.5f);
+    // Con el EN encendido aparece el offset en los 6 canales. Motores quietos: se aprende el offset
+    for (int c = 0; c < NUM_ADC_CH; ++c) fill(c, OFS, OFS, 0);
+    pico_volts(0, 0, 0);
+    heartbeat(0x07, 300);
+    assert(get16(REG_CURRENT) < 100 && get16(REG_CURRENT + 2) < 100);
+    printf("ok  offset aprendido, corriente en reposo %d mA\n", get16(REG_CURRENT));
+
+    // 2. 2 A en M1 con PWM al 50 %: no corta, y reporta ~2 A (no 2 A + offset)
+    pico_volts(6000, 0, 0);
+    fill(0, OFS, OFS + amps(2.0f), 0.5f);
     heartbeat(0x07, 1000);
     assert(en_pin[0]);
     const int16_t ma = get16(REG_CURRENT);
     printf("ok  2 A sin corte (medido %d mA)\n", ma);
-    assert(ma > 1800 && ma < 2200);
+    assert(ma > 1850 && ma < 2150);
+
+    // El mismo motor al 100 % (sin parte "off" en la ventana): se mide contra el offset aprendido
+    fill(0, OFS, OFS + amps(2.0f), 1.0f);
+    heartbeat(0x07, 200);
+    printf("ok  2 A al 100 %% de PWM (medido %d mA)\n", get16(REG_CURRENT));
+    assert(get16(REG_CURRENT) > 1850 && get16(REG_CURRENT) < 2150);
+    fill(0, OFS, OFS, 0);
 
     // 3. 3.5 A sostenido en M2 (canal 3, el otro sentido): corta a los 500 ms, no antes
-    fill(3, OFS, OFS + 102, 0.3f);
+    pico_volts(0, -3000, 0);
+    fill(3, OFS, OFS + amps(3.5f), 0.3f);
     heartbeat(0x07, 450);
     assert(en_pin[1]);
     heartbeat(0x07, 100);
@@ -64,19 +91,22 @@ int main(void) {
     printf("ok  falla enclavada y borrado\n");
 
     // 4. 5 A en M3: corta por pico en ~20 ms
-    fill(4, OFS, OFS + 146, 0.5f);
+    pico_volts(0, 0, 9000);
+    fill(4, OFS, OFS + amps(5.0f), 0.5f);
     heartbeat(0x07, 25);
     assert(!en_pin[2] && regs[REG_CAUSE + 2] == FAULT_PEAK);
     fill(4, OFS, OFS, 0);
     printf("ok  pico en M3\n");
 
-    // 5. Nivel de falla del driver (~2.1 V fijo) en M1
-    fill(1, 2600, 2600, 1.0f);
+    // 5. Nivel de falla del driver (IS = 4.1 mA x 470 ohm = 1.93 V, el mínimo del datasheet) en M1
+    fill(1, 2395, 2395, 1.0f);
     heartbeat(0x07, 10);
     assert(!en_pin[0] && regs[REG_CAUSE + 0] == FAULT_DRIVER);
     fill(1, OFS, OFS, 0);
-    fill(0, OFS, OFS, 0);
     printf("ok  falla del driver en M1\n");
+
+    // 3 A + el offset máximo del datasheet (385 uA) NO debe parecer falla del driver
+    assert((OFS + amps(4.5f)) * 3300 / 4095 < DRIVER_FAULT_MV);
 
     // 6. La Pico deja de mandar el latido: se apagan los EN y queda la causa "enlace"
     protection_on_clear(0x07 | 0x80);

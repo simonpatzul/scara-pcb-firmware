@@ -74,15 +74,16 @@ Las pruebas de la lógica de protección y del JSON corren en el PC: `make -C st
    - Con el voltaje del mismo signo que `home_volts` (negativo), el eje debe ir hacia el final de carrera de **home**.
    - Hay que apretar cada final de carrera con la mano y comprobar que cambie `home=` / `fin=`.
    - Con el eje frenado con la mano, la corriente debe subir y el STM32 debe cortar pasados los 3 A.
-4. **Medir la corriente real una vez** con un multímetro o una pinza amperimétrica y compararla con la que reporta el STM32. Si no coinciden, ajustar `K_ILIS` en `stm32/inc/config.h`. El valor 20000 es el típico de la familia y no está verificado contra la hoja de datos del IFX007T.
+4. **Medir la corriente real una vez** con un multímetro o una pinza amperimétrica y compararla con la que reporta el STM32. Si no coinciden, ajustar `K_ILIS` en `stm32/inc/config.h`. El datasheet del IFX007T da 19 500 como típico, con 15 000–24 000 de rango (±23 %).
 5. **Grabar `scara_fw.uf2`** y hacer el home como antes.
 
 ## Cosas del hardware a tener en cuenta
 
 - **I2C de la Pico:** en el esquemático, GP4 quedó como SCL y GP5 como SDA. El I2C por hardware del RP2040 los usa al revés (los pines pares son SDA). Por eso la Pico usa I2C por software (`soft_i2c.cpp`) y funciona igual. Si se hace otra revisión de la PCB, conviene cruzar esas dos pistas.
 - **Servo y bomba:** comparten slice PWM y por eso los dos trabajan a 50 Hz. Para la bomba alcanza (prendida, apagada o a media potencia).
-- **Resolución de la corriente:** con R_IS = 470 Ω, 1 A da unas 29 cuentas del ADC. Alcanza para proteger, pero no para medir con precisión. En falla, el pin IS llega a unos 2.1 V, dentro del rango del STM32.
-- **Comandos AT del FC41D** (`stm32/src/fc41d.c`): siguen el manual de Quectel (`AT+QSTAAPINFO`, `AT+QMTOPEN`, `AT+QMTCONN`, `AT+QMTPUB`), pero no se probaron con el módulo real. Si no conecta, hay que revisar las respuestas en el monitor serie del módulo y ajustar las cadenas.
+- **Resolución de la corriente:** con R_IS = 470 Ω, 1 A da unas 30 cuentas del ADC. Alcanza para proteger, pero no para medir con precisión. En falla, el pin IS llega a 1.93–2.87 V, dentro del rango del STM32.
+- **Offset del IS:** cada IFX007T suma entre 30 y 385 µA de offset, y solo con el EN encendido; con el EN apagado el IS da 0. Por eso el STM32 no calibra el cero al arrancar: lo aprende mientras el motor trabaja, de los momentos en que ese medio puente no conduce (ver `protection.c`).
+- **Comandos AT del FC41D** (`stm32/src/fc41d.c`): siguen el manual AT V1.0 del FC41D (`AT+QSTAAPINFO` sin comillas, `AT+QMTCFG`, `AT+QMTOPEN`, `AT+QMTCONN`, `AT+QMTPUBRAW` para el JSON), pero no se probaron con el módulo real. Si no conecta, hay que revisar las respuestas en el monitor serie del módulo y ajustar las cadenas.
 
 ## Subirlo a GitHub
 

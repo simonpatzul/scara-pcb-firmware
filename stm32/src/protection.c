@@ -7,10 +7,10 @@
 #define MA_PER_COUNT  (3300.0f / 4095.0f / R_IS_OHM * K_ILIS)
 #define MV_PER_COUNT  (3300.0f / 4095.0f)
 
-static uint32_t cal_sum[NUM_ADC_CH];
-static uint32_t cal_ticks = 0;
-static uint16_t offset[NUM_ADC_CH];
-static bool cal_done = false;
+// Offset del IS de cada medio puente, aprendido con el EN encendido (ver config.h y el paso 5)
+static float offset[NUM_ADC_CH];
+static bool offset_known[NUM_ADC_CH];
+static bool cal_done = false;      // pasó STARTUP_MS desde el arranque
 
 static uint16_t cnt_sust[NUM_MOTORS], cnt_peak[NUM_MOTORS], cnt_drv[NUM_MOTORS];
 static uint16_t i_sust, t_sust, i_peak, t_peak;
@@ -68,27 +68,25 @@ static void trip(int m, uint8_t cause) {
 }
 
 void protection_tick(void) {
-    // 1. Máximo y promedio de cada canal en la ventana del DMA (~0.9 ms).
-    //    El IS solo da corriente mientras conduce el lado alto, o sea durante la parte "on" del PWM:
-    //    el máximo es la corriente del motor; el promedio sirve para ver el nivel fijo de falla del driver.
+    // 1. Máximo, mínimo y promedio de cada canal en la ventana del DMA (~1 ms, ~20 periodos del PWM).
+    //    El IS da corriente + offset mientras conduce el lado alto (parte "on" del PWM) y solo el offset
+    //    mientras conduce el lado bajo: el máximo menos el offset es la corriente del motor; el promedio
+    //    sirve para ver el nivel fijo de falla del driver.
     uint16_t maxv[NUM_ADC_CH] = {0};
+    uint16_t minv[NUM_ADC_CH];
     uint32_t sum[NUM_ADC_CH] = {0};
+    for (int c = 0; c < NUM_ADC_CH; ++c) minv[c] = 0xFFFF;
     for (int s = 0; s < ADC_SCANS; ++s) {
         for (int c = 0; c < NUM_ADC_CH; ++c) {
             const uint16_t v = adc_buf[s][c];
             if (v > maxv[c]) maxv[c] = v;
+            if (v < minv[c]) minv[c] = v;
             sum[c] += v;
         }
     }
 
-    // 2. Calibración del cero al arrancar, con todos los EN apagados
-    if (!cal_done) {
-        for (int c = 0; c < NUM_ADC_CH; ++c) cal_sum[c] += sum[c] / ADC_SCANS;
-        if (++cal_ticks >= CAL_MS) {
-            for (int c = 0; c < NUM_ADC_CH; ++c) offset[c] = (uint16_t)(cal_sum[c] / cal_ticks);
-            cal_done = true;
-        }
-    }
+    // 2. Arranque: esperar a que el ADC esté estable antes de aceptar pedidos de EN
+    if (!cal_done && millis() >= STARTUP_MS) cal_done = true;
 
     // 3. Borrados de falla pedidos por la Pico
     __disable_irq();
@@ -115,12 +113,40 @@ void protection_tick(void) {
     }
 
     // 5. Corriente y fallas de cada motor (M1 = canales 0/1, M2 = 2/3, M3 = 4/5)
+    //    Offset de cada canal (solo con el EN encendido; con el EN apagado el IS da 0):
+    //    - si la ventana muestra conmutación (max - min > SWITCH_COUNTS), el mínimo es el offset;
+    //    - si la Pico manda casi 0 V a ese motor, todo el canal es offset.
+    //    Se promedia (~100 ms). El cero de cada ventana es el menor entre su mínimo y el offset aprendido:
+    //    así el medio puente que no conduce da 0, y el que conduce al 100 % (sin parte "off") se mide
+    //    contra el offset que se aprendió antes.
+    const bool pico_fresh = millis() - pico_last_block_ms < 300 && pico_last_block_ms != 0;
+    int32_t counts_m[NUM_MOTORS];
+    for (int m = 0; m < NUM_MOTORS; ++m) {
+        const int16_t u_mv = get16(REG_PICO_VOLT + 2 * m);
+        const bool idle = pico_fresh && u_mv > -IDLE_MV_PICO && u_mv < IDLE_MV_PICO;
+        int32_t counts = 0;
+        for (int k = 0; k < 2; ++k) {
+            const int c = 2 * m + k;
+            if (en_active & (1u << m)) {
+                float sample = -1.0f;
+                if (maxv[c] - minv[c] > SWITCH_COUNTS) sample = minv[c];
+                else if (idle) sample = (float)sum[c] / ADC_SCANS;
+                if (sample >= 0.0f) {
+                    offset[c] = offset_known[c] ? offset[c] + 0.01f * (sample - offset[c]) : sample;
+                    offset_known[c] = true;
+                }
+            }
+            float zero = minv[c];
+            if (offset_known[c] && offset[c] < zero) zero = offset[c];
+            const int32_t cc = (int32_t)maxv[c] - (int32_t)(zero + 0.5f);
+            if (cc > counts) counts = cc;   // solo una mitad conduce: la del sentido activo
+        }
+        counts_m[m] = counts;
+    }
+
     for (int m = 0; m < NUM_MOTORS; ++m) {
         const int a = 2 * m, b = 2 * m + 1;
-        const int32_t ca = cal_done ? (int32_t)maxv[a] - offset[a] : 0;
-        const int32_t cb = cal_done ? (int32_t)maxv[b] - offset[b] : 0;
-        int32_t counts = ca > cb ? ca : cb;   // solo una mitad conduce: la del sentido activo
-        if (counts < 0) counts = 0;
+        const int32_t counts = counts_m[m];
         const int32_t ma = (int32_t)(counts * MA_PER_COUNT);
         put16(REG_CURRENT + 2 * m, (int16_t)(ma > 32767 ? 32767 : ma));
 

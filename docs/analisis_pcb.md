@@ -85,6 +85,8 @@ Valores típicos de la familia NovalithIC, **sin verificar contra la hoja de dat
 - **Resolución baja:** con 470 Ω, 1 A son unas 29 cuentas, y además el IS tiene un offset y una tolerancia grandes con corrientes bajas. El firmware va a calibrar el cero al arrancar (con los EN apagados) y a promediar. Los umbrales hay que **ajustarlos midiendo una vez con una pinza o un multímetro**.
 - El firmware distingue "sobrecorriente" (≈ 87–131 cuentas sostenidas) de "falla del driver" (> ~1.5 V).
 
+**Datos verificados con el datasheet del IFX007T** (ver `/mnt/project-files/scara/datasheets/datos_firmware.md`): dkILIS = 15 000 / 19 500 / 24 000, offset del IS de 30–385 µA (solo con el EN encendido) y nivel de falla de 4.1–6.1 mA (1.93–2.87 V con 470 Ω). El firmware usa 19 500, aprende el offset con el motor andando y toma > 1.7 V como falla del driver. La tabla de arriba se calculó con 20 000; la diferencia es de 2.5 %.
+
 ## 5. Plan de software propuesto
 
 **A. Pico (cambio sobre el repo actual)**

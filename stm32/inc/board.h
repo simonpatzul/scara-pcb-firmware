@@ -12,7 +12,7 @@
 
 #define NUM_MOTORS   3
 #define NUM_ADC_CH   6
-#define ADC_SCANS    64      // el DMA guarda las últimas 64 lecturas de los 6 canales (~0.9 ms)
+#define ADC_SCANS    48      // el DMA guarda las últimas 48 lecturas de los 6 canales (~1 ms)
 
 extern volatile uint16_t adc_buf[ADC_SCANS][NUM_ADC_CH];
 extern volatile uint32_t ms_ticks;

@@ -60,11 +60,12 @@ static void adc_init(void) {
     ADC1->CR |= ADC_CR_ADEN;
     while (!(ADC1->ISR & ADC_ISR_ADRDY)) {}
 
-    // Escaneo continuo de PA0..PA5 con muestreo corto (13.5 ciclos, ~2 us por canal, ~13 us por vuelta).
-    // Así las lecturas caen en distintos puntos del PWM de 20 kHz y se puede tomar el máximo.
+    // Escaneo continuo de PA0..PA5 con muestreo de 28.5 ciclos (el datasheet admite hasta 25 k de fuente;
+    // aquí hay ~1 k). 41 ciclos a 12 MHz = 3.4 us por canal, ~20 us por vuelta: las lecturas caen en
+    // distintos puntos del PWM de 20 kHz y se pueden tomar el máximo y el mínimo de cada ventana.
     ADC1->CFGR1 = ADC_CFGR1_CONT | ADC_CFGR1_DMAEN | ADC_CFGR1_DMACFG;
     ADC1->CHSELR = 0x3F;
-    ADC1->SMPR = 2;
+    ADC1->SMPR = 3;
 
     DMA1_Channel1->CPAR = (uint32_t)&ADC1->DR;
     DMA1_Channel1->CMAR = (uint32_t)adc_buf;
@@ -92,7 +93,7 @@ void adc_read_internal(int16_t* temp_dC, uint16_t* vdda_mV) {
 
     // Volver al escaneo continuo
     ADC1->CHSELR = 0x3F;
-    ADC1->SMPR = 2;
+    ADC1->SMPR = 3;
     ADC1->CFGR1 |= ADC_CFGR1_CONT | ADC_CFGR1_DMAEN;
     DMA1_Channel1->CNDTR = ADC_SCANS * NUM_ADC_CH;
     DMA1_Channel1->CCR |= DMA_CCR_EN;

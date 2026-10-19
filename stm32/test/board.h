@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #define NUM_MOTORS 3
 #define NUM_ADC_CH 6
-#define ADC_SCANS 64
+#define ADC_SCANS 48
 extern volatile uint16_t adc_buf[ADC_SCANS][NUM_ADC_CH];
 extern volatile uint32_t ms_ticks;
 extern bool en_pin[NUM_MOTORS];
