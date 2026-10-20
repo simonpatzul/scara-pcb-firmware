@@ -11,13 +11,20 @@ static bool have_ptr = false;    // el primer byte de una escritura es el númer
 static uint8_t wr_start = 0, wr_len = 0;
 static uint8_t wr_buf[REG_COUNT];
 
+#define I2C_STUCK_MS 25
+static volatile uint32_t busy_since = 0;   // 0 = el bus no está ocupado
+
+static void enable_peripheral(void) {
+    I2C1->CR1 = I2C_CR1_ADDRIE | I2C_CR1_RXIE | I2C_CR1_TXIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE |
+                I2C_CR1_ERRIE | I2C_CR1_PE;
+}
+
 void i2c_slave_init(void) {
     RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
     // El reloj del I2C1 es HSI (8 MHz). TIMINGR para 100 kHz; en esclavo solo cuentan los tiempos de setup/hold
     I2C1->TIMINGR = 0x2000090E;
     I2C1->OAR1 = I2C_OAR1_OA1EN | (STM32_I2C_ADDR << 1);
-    I2C1->CR1 = I2C_CR1_ADDRIE | I2C_CR1_RXIE | I2C_CR1_TXIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE |
-                I2C_CR1_ERRIE | I2C_CR1_PE;
+    enable_peripheral();
     NVIC_SetPriority(I2C1_IRQn, 0);
     NVIC_EnableIRQ(I2C1_IRQn);
 
@@ -39,6 +46,23 @@ static void commit_write(void) {
     }
     if (block) pico_last_block_ms = millis();
     if (cfg) protection_on_config();
+}
+
+void i2c_slave_poll(void) {
+    if (!(I2C1->ISR & I2C_ISR_BUSY)) { busy_since = 0; return; }
+    const uint32_t now = millis();
+    if (busy_since == 0) { busy_since = now ? now : 1; return; }
+    if (now - busy_since < I2C_STUCK_MS) return;
+    // Bus trabado (la Pico se reinició a mitad de un mensaje, ruido...): apagar y volver a prender el I2C
+    // suelta SCL y SDA. RM0360: PE tiene que quedar en 0 al menos 3 ciclos de APB.
+    __disable_irq();
+    I2C1->CR1 &= ~I2C_CR1_PE;
+    for (volatile int i = 0; i < 10; ++i) {}
+    wr_len = 0;
+    have_ptr = false;
+    enable_peripheral();
+    __enable_irq();
+    busy_since = 0;
 }
 
 void I2C1_IRQHandler(void) {

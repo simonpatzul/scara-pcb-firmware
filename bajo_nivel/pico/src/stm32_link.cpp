@@ -73,6 +73,9 @@ void Stm32Link::exchange(uint8_t en_mask) {
     } else {
         ok_ = false;
     }
+    // Si algo falló, liberar el bus (el STM32 pudo quedarse sosteniendo SDA a mitad de un byte).
+    // Si no se arregla, el STM32 deja de recibir el latido y apaga los EN: el error siempre termina en seguro
+    if (!ok_) bus.recover();
 }
 
 void Stm32Link::service_raw(uint8_t en_mask) {
@@ -112,5 +115,5 @@ void Stm32Link::service(Axis* axes, int n) {
     put16(&p[REG_PICO_TEMP - REG_PICO_CYCLE], clamp16(rp2040_temperature() * 10.0f));
     for (int b = 0; b < 4; ++b) p[REG_PICO_LOOP - REG_PICO_CYCLE + b] = (uint8_t)(loop_count_ >> (8 * b));
     p[REG_PICO_LIMITS - REG_PICO_CYCLE] = limits;
-    bus.write(STM32_I2C_ADDR, blk, sizeof(blk));
+    if (!bus.write(STM32_I2C_ADDR, blk, sizeof(blk))) bus.recover();
 }

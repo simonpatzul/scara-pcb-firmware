@@ -35,6 +35,7 @@ int main(void) {
             last_tick = ms_ticks;
             watchdog_kick();
         }
+        i2c_slave_poll();
         fc41d_poll();
         telemetry_poll();
     }
