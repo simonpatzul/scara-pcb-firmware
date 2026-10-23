@@ -5,285 +5,346 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SCADA Estación 1 SCARA</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
-/* Layout: estilo Apple. Fondo agrupado gris, tarjetas blancas redondeadas, barra superior translúcida fija.
-   Título grande → resumen (estado, tiempo de ciclo, tarjeta, último ciclo, ciclos) → celda + secuencia/pila/bandeja
-   → ciclo de la Pico y comunicación → ejes → sistema y alarmas. Claro y oscuro. */
+/* Pantalla SCADA monocromática (inspirada en la referencia de Simon): fondo gris claro, tarjetas blancas,
+   tarjetas destacadas en negro, barra de pestañas en píldora arriba y barra lateral flotante oscura.
+   Pestañas: Resumen · Estación · Ejes. En computador cada pestaña cabe en una sola pantalla (lienzo 900 px
+   de alto escalado a la ventana, sin scroll). En celular las tarjetas se apilan. Tema claro/oscuro con botón. */
 :root {
-  --bg: #f2f2f7;
-  --panel: #ffffff;
-  --panel-2: #f2f2f7;
-  --well: #f7f7fa;
-  --bezel: rgba(60, 60, 67, .12);
-  --ink: #1d1d1f;
-  --muted: #6e6e73;
-  --line: rgba(60, 60, 67, .2);
-  --process: #007aff;
-  --process-soft: #cfe3ff;
-  --signal: #007aff;
-  --signal-ink: #ffffff;
-  --ok: #34c759;
-  --warn: #ff9f0a;
-  --warn-ink: #1d1d1f;
-  --alarm: #ff3b30;
-  --alarm-ink: #ffffff;
-  --stale: #aeaeb2;
-  --card: #34a35c;
-  --card-edge: #1e7a40;
-  --h1: #ffd60a;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 20px rgba(0, 0, 0, .05);
-  --bar: rgba(242, 242, 247, .78);
-  --f-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --f-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --f-data: "SF Pro Rounded", ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto, sans-serif;
-  --f-mono: "SF Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  --bg: #ebebeb; --panel: #fafafa; --panel-2: #efefef; --well: #f4f4f4; --bezel: rgba(0, 0, 0, .08);
+  --ink: #111111; --muted: #7b7b7b; --line: rgba(0, 0, 0, .1);
+  --process: #111111; --on-process: #ffffff; --process-soft: rgba(0, 0, 0, .1); --signal: #111111;
+  --ok: #3f9e78; --warn: #d99a00; --alarm: #e5484d; --stale: #b8b8b8;
+  --card: #5aa883; --card-edge: #2f6f52; --h1: #f5c400;
+  --feat: #111111; --feat-ink: #ffffff; --feat-muted: rgba(255, 255, 255, .58); --feat-line: rgba(255, 255, 255, .14);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .03);
+  --f-display: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto, Arial, sans-serif;
+  --f-body: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, Arial, sans-serif;
+  --f-data: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #000000; --panel: #1c1c1e; --panel-2: #2c2c2e; --well: #141416; --bezel: rgba(84, 84, 88, .5);
-    --ink: #f5f5f7; --muted: #98989d; --line: rgba(84, 84, 88, .7); --process: #0a84ff; --process-soft: #12355f;
-    --signal: #0a84ff; --ok: #30d158; --warn: #ff9f0a; --alarm: #ff453a; --stale: #636366;
-    --card: #2a9a55; --card-edge: #5fe08f; --shadow: none; --bar: rgba(0, 0, 0, .72); color-scheme: dark;
+    --bg: #0b0b0b; --panel: #171717; --panel-2: #222222; --well: #131313; --bezel: rgba(255, 255, 255, .08);
+    --ink: #f2f2f2; --muted: #8f8f8f; --line: rgba(255, 255, 255, .1);
+    --process: #f2f2f2; --on-process: #111111; --process-soft: rgba(255, 255, 255, .12); --signal: #f2f2f2;
+    --ok: #4cc08f; --warn: #f0b429; --alarm: #ff6369; --stale: #5c5c5c; --card: #3f9e78; --card-edge: #8fe0bb;
+    --feat: #f2f2f2; --feat-ink: #111111; --feat-muted: rgba(0, 0, 0, .55); --feat-line: rgba(0, 0, 0, .12);
+    color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #000000; --panel: #1c1c1e; --panel-2: #2c2c2e; --well: #141416; --bezel: rgba(84, 84, 88, .5);
-  --ink: #f5f5f7; --muted: #98989d; --line: rgba(84, 84, 88, .7); --process: #0a84ff; --process-soft: #12355f;
-  --signal: #0a84ff; --ok: #30d158; --warn: #ff9f0a; --alarm: #ff453a; --stale: #636366;
-  --card: #2a9a55; --card-edge: #5fe08f; --shadow: none; --bar: rgba(0, 0, 0, .72); color-scheme: dark;
+  --bg: #0b0b0b; --panel: #171717; --panel-2: #222222; --well: #131313; --bezel: rgba(255, 255, 255, .08);
+  --ink: #f2f2f2; --muted: #8f8f8f; --line: rgba(255, 255, 255, .1);
+  --process: #f2f2f2; --on-process: #111111; --process-soft: rgba(255, 255, 255, .12); --signal: #f2f2f2;
+  --ok: #4cc08f; --warn: #f0b429; --alarm: #ff6369; --stale: #5c5c5c; --card: #3f9e78; --card-edge: #8fe0bb;
+  --feat: #f2f2f2; --feat-ink: #111111; --feat-muted: rgba(0, 0, 0, .55); --feat-line: rgba(0, 0, 0, .12);
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { height: auto; overflow-y: auto; }
-body {
-  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45;
-  -webkit-font-smoothing: antialiased;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 0 40px;
-}
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bar); }
-.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.4; -webkit-font-smoothing: antialiased; }
 .num, .v { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
-.lbl { font-size: 13px; font-weight: 500; color: var(--muted); }
+.lbl { font-size: 12.5px; font-weight: 500; color: var(--muted); }
 .tag { font-size: 12px; color: var(--muted); }
-h1, h2 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
-h2 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
-.panel { background: var(--panel); border-radius: 18px; box-shadow: var(--shadow); min-width: 0; }
-.panel > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 16px 18px 0; }
-.body { padding: 12px 18px 18px; }
-.well { background: var(--panel-2); border-radius: 12px; padding: 12px 14px; }
+h1, h2 { font-family: var(--f-display); margin: 0; }
+h2 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.panel { background: var(--panel); border-radius: 20px; box-shadow: var(--shadow); min-width: 0; }
+.panel > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 14px 16px 0; }
+.body { padding: 10px 16px 14px; }
 button {
-  font: 500 14px var(--f-body); color: var(--process); background: color-mix(in srgb, var(--process) 12%, transparent);
-  border: 0; border-radius: 999px; padding: 7px 14px; cursor: pointer;
+  font: 600 13px var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 14px; cursor: pointer; white-space: nowrap;
 }
-button:hover { background: color-mix(in srgb, var(--process) 20%, transparent); }
-button:focus-visible, input:focus-visible { outline: 3px solid color-mix(in srgb, var(--process) 45%, transparent); outline-offset: 2px; }
-button.primary { background: var(--process); color: #fff; }
+button:hover { background: var(--panel-2); }
+button:focus-visible, input:focus-visible { outline: 3px solid color-mix(in srgb, var(--ink) 35%, transparent); outline-offset: 2px; }
+button.primary { background: var(--process); color: var(--on-process); border-color: transparent; }
 
-/* Barra superior translúcida + título grande */
-.topbar {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
-  margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 0 calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
-  padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
-  background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: .5px solid var(--bezel);
-}
-.topbar .brand { font: 600 15px var(--f-display); margin-right: auto; }
-.topbar .actions { display: flex; gap: 8px; }
-.hero { padding: 14px 2px 0; }
-.hero h1 { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
-.hero p { margin: 4px 0 0; color: var(--muted); }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 13px; font-weight: 500;
-  background: var(--panel-2); color: var(--ink); white-space: nowrap; }
+/* ---------- Estructura base (celular) ---------- */
+.stage { display: grid; gap: 12px; max-width: 720px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 90px max(16px, env(safe-area-inset-left, 0px)); }
+.pane { display: grid; gap: 12px; min-height: 0; }
+.pane[hidden] { display: none !important; }
+.col { display: grid; gap: 12px; align-content: start; min-width: 0; min-height: 0; }
+
+/* Barra superior: logo, pestañas en píldora, estado */
+.topbar { display: flex; align-items: center; gap: 10px; padding-top: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font: 700 15px var(--f-display); margin-right: auto; }
+.logo { width: 36px; height: 36px; border-radius: 10px; background: var(--feat); color: var(--feat-ink); display: grid; place-items: center; font: 800 13px var(--f-display); letter-spacing: -.02em; }
+.tabs { display: flex; gap: 2px; background: var(--panel); border-radius: 999px; padding: 4px; order: 3; width: 100%; overflow-x: auto; }
+.tab { border: 0; background: transparent; padding: 8px 16px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; flex: 1 0 auto; justify-content: center; }
+.tab:hover { background: var(--panel-2); }
+.tab[aria-selected="true"] { background: var(--process); color: var(--on-process); }
+.tab .badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.tab[aria-selected="true"] .badge { background: color-mix(in srgb, var(--on-process) 20%, transparent); color: var(--on-process); }
+.tab .badge.hot { background: var(--alarm); color: #fff; }
+.tab .badge:empty { display: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--panel); color: var(--ink); white-space: nowrap; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--stale); flex: none; }
 .chip.ok .dot { background: var(--ok); }
-.chip.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); }
 .chip.warn .dot { background: var(--warn); }
-.chip.alarm { background: color-mix(in srgb, var(--alarm) 16%, transparent); color: var(--alarm); }
+.chip.alarm { color: var(--alarm); }
 .chip.alarm .dot { background: var(--alarm); }
+.panel .chip, .kpi .chip { background: var(--panel-2); }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--panel); display: grid; place-items: center; font: 700 12px var(--f-display); }
 
-/* Resumen */
-.kpis { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.6fr) repeat(3, minmax(0, .8fr)); gap: 16px; }
-.kpi { padding: 16px 18px; display: grid; gap: 4px; align-content: start; }
-.kpi .v { font-size: 34px; font-weight: 600; line-height: 1.05; letter-spacing: -.01em; }
-.kpi .v small { font-size: 17px; font-weight: 500; color: var(--muted); margin-left: 3px; }
-.kpi .sub { font-size: 13px; color: var(--muted); }
-.verdict .big { font: 700 26px/1.1 var(--f-display); letter-spacing: -.01em; }
-.verdict .big::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--stale); margin-right: 10px; vertical-align: 3px; }
-.verdict.ok .big::before { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
-.verdict.warn { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
+.titlebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.titlebar h1 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin-right: 6px; }
+.titlebar .sub { color: var(--muted); font-size: 13px; margin-right: auto; }
+.livepill { display: inline-flex; align-items: center; gap: 8px; background: var(--panel); border-radius: 999px; padding: 7px 14px; font: 600 13px var(--f-data); font-variant-numeric: tabular-nums; }
+.livepill .dot { background: var(--ink); }
+
+/* Barra lateral flotante */
+.rail { position: fixed; z-index: 15; left: 50%; bottom: max(14px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 4px; padding: 6px; border-radius: 999px; background: #111; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+:root[data-theme="dark"] .rail { background: #262626; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rail { background: #262626; } }
+.rail button { width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgba(255,255,255,.75); display: grid; place-items: center; position: relative; }
+.rail button[hidden] { display: none; }
+.rail button:hover { background: rgba(255,255,255,.12); color: #fff; }
+.rail button.on { background: rgba(255,255,255,.16); color: #fff; }
+.rail svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rail .tip { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); background: var(--feat); color: var(--feat-ink); font: 600 11.5px var(--f-body); padding: 4px 8px; border-radius: 8px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s; }
+.rail button:hover .tip, .rail button:focus-visible .tip { opacity: 1; }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.kpis .verdict, .kpis .timer { grid-column: 1 / -1; }
+.kpi { padding: 14px 16px; display: grid; gap: 4px; align-content: start; }
+.kpi .v { font-size: 30px; font-weight: 700; line-height: 1.05; letter-spacing: -.03em; }
+.kpi .v small { font-size: 15px; font-weight: 600; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+.kpi .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill-delta { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--ink); }
+.feature { background: var(--feat); color: var(--feat-ink); }
+.feature .lbl, .feature .sub, .feature .tag { color: var(--feat-muted); }
+.verdict .big { font: 700 24px/1.15 var(--f-display); letter-spacing: -.02em; }
+.verdict .big::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--stale); margin-right: 10px; vertical-align: 3px; }
+.verdict.ok .big::before { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 30%, transparent); }
+.verdict.warn .big { color: var(--warn); }
 .verdict.warn .big::before { background: var(--warn); }
-.verdict.alarm { background: color-mix(in srgb, var(--alarm) 13%, var(--panel)); }
 .verdict.alarm .big { color: var(--alarm); }
 .verdict.alarm .big::before { background: var(--alarm); }
+.verdict .sub { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .timer .v.ok { color: var(--ok); }
 .timer .v.warn { color: var(--warn); }
-.window { position: relative; height: 10px; background: var(--panel-2); border-radius: 999px; margin-top: 10px; }
-.window .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--ok) 28%, transparent); border-radius: 999px; }
-.window .fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--process); width: 0; border-radius: 999px; opacity: .85; }
+.timer-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.window { position: relative; height: 8px; background: var(--panel-2); border-radius: 999px; margin-top: 8px; }
+.window .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--ok) 30%, transparent); border-radius: 999px; }
+.window .fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--process); width: 0; border-radius: 999px; }
 .window .mark { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--ink); }
 .window .last { position: absolute; top: -9px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--muted); transform: translateX(-5px); }
-.scale { position: relative; height: 16px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.scale { position: relative; height: 14px; font-size: 10.5px; color: var(--muted); margin-top: 3px; }
 .scale span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 
-/* Celda y proceso */
-.cell { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; }
-.view { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 12px; }
+/* Resumen: medidor y barras */
+.gauge-card { display: flex; flex-direction: column; }
+.gauge-card .body { flex: 1; display: grid; align-content: space-between; }
+.gauge-card svg { width: 100%; height: auto; display: block; pointer-events: none; }
+.gauge-card svg text { fill: var(--feat-muted); }
+.gauge-foot b { display: block; font: 700 15px var(--f-display); }
+.gauge-foot span { font-size: 12px; color: var(--feat-muted); }
+.hist svg { width: 100%; height: auto; display: block; pointer-events: none; }
+.seg { display: inline-flex; background: var(--panel-2); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg span { padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.seg span.on { background: var(--panel); color: var(--ink); }
+
+/* Celda */
+.view { display: grid; grid-template-columns: minmax(0, 1fr) 64px; gap: 10px; }
 .view svg, .mini svg, .spark svg { width: 100%; height: auto; display: block; pointer-events: none; }
 #arm { border-radius: 14px; }
 svg text { font-family: var(--f-body); font-size: 11px; fill: var(--muted); }
-.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 8px; }
 .legend i { display: inline-block; width: 12px; height: 9px; vertical-align: middle; margin-right: 5px; border-radius: 2px; border: 1px solid var(--card-edge); background: var(--card); }
 .legend b { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--h1); vertical-align: middle; margin-right: 5px; }
-.side { display: grid; gap: 16px; align-content: start; }
-.mini { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.seq { list-style: none; margin: 0; padding: 0; background: var(--panel-2); border-radius: 12px; overflow: hidden; }
-.seq li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 12px; font-size: 14px; color: var(--muted); }
-.seq li + li { border-top: .5px solid var(--line); }
-.seq li .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 600 12px var(--f-data); border: 1.5px solid var(--line); }
+.mini { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.seq { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.seq li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 10px; border-radius: 12px; font-size: 13px; color: var(--muted); background: var(--panel-2); }
+.seq li .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 11px var(--f-data); border: 1.5px solid var(--line); }
 .seq li.done { color: var(--ink); }
 .seq li.done .n { background: var(--ok); border-color: var(--ok); color: #fff; font-size: 0; }
-.seq li.done .n::after { content: "✓"; font-size: 12px; }
-.seq li.on { color: var(--process); background: color-mix(in srgb, var(--process) 12%, var(--panel)); font-weight: 600; }
-.seq li.on .n { background: var(--process); border-color: var(--process); color: #fff; }
-.seq li .x { font-size: 12px; font-family: var(--f-data); }
-.nodata { color: var(--muted); font-size: 13px; padding: 4px 0 0; }
+.seq li.done .n::after { content: "✓"; font-size: 11px; }
+.seq li.on { color: var(--on-process); background: var(--process); font-weight: 600; }
+.seq li.on .n { background: var(--on-process); border-color: var(--on-process); color: var(--process); }
+.seq li .x { font-size: 12px; font-family: var(--f-data); font-weight: 700; }
+.nodata { color: var(--muted); font-size: 12.5px; }
+
+/* Tablero de tarjetas (kanban) */
+.board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lane { background: var(--panel-2); border-radius: 16px; padding: 10px; display: grid; gap: 8px; align-content: start; min-height: 120px; }
+.lane > header { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; padding: 2px 4px; }
+.lane > header .dot { background: var(--muted); }
+.lane.proc > header .dot { background: var(--ink); }
+.lane.done > header .dot { background: var(--ok); }
+.lane > header span:last-child { color: var(--muted); font-weight: 600; }
+.kcard { background: var(--panel); border-radius: 12px; padding: 9px 10px; display: grid; gap: 5px; }
+.kcard .k-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.kcard .k-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.kcard b { font-size: 13px; }
+.k-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.kcard .k-meta { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--muted); }
+.kbar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.kbar i { display: block; height: 100%; background: var(--ink); border-radius: 2px; }
+.kcard.ok .kbar i { background: var(--ok); }
+.kempty { font-size: 12px; color: var(--muted); padding: 6px 4px; }
 
 /* Ciclo de la Pico + comunicación */
-.duo { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; }
-.cycle { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.step { padding: 6px 12px; border-radius: 999px; background: var(--panel-2); font-size: 13px; font-weight: 500; color: var(--muted); }
-.step.done { color: var(--ink); background: color-mix(in srgb, var(--ok) 16%, var(--panel)); }
-.step.on { background: var(--process); color: #fff; }
-.cycle .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+.cycle { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.step { padding: 5px 12px; border-radius: 999px; background: var(--panel-2); font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.step.done { color: var(--ink); }
+.step.on { background: var(--process); color: var(--on-process); }
+.cycle .sep { width: 1px; height: 20px; background: var(--line); margin: 0 3px; }
 .step.side.on { background: var(--alarm); color: #fff; }
-.cycle-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 14px; }
-.kv { display: grid; gap: 1px; }
-.kv .v { font-size: 20px; font-weight: 600; }
-.chain { display: flex; align-items: center; overflow-x: auto; padding-bottom: 2px; }
-.node { flex: none; background: var(--panel-2); border-radius: 12px; padding: 8px 10px; text-align: center; min-width: 70px; }
-.node b { display: block; font: 600 14px var(--f-display); }
-.node span { font-size: 11px; color: var(--muted); }
-.link { flex: 1 1 30px; min-width: 50px; display: grid; justify-items: center; gap: 3px; padding: 0 4px; }
+.cycle-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.kv { display: grid; gap: 1px; min-width: 0; }
+.kv .v { font-size: 19px; font-weight: 700; white-space: nowrap; letter-spacing: -.02em; }
+.chain { display: flex; align-items: center; }
+.node { flex: none; background: var(--panel-2); border-radius: 12px; padding: 7px 8px; text-align: center; min-width: 64px; }
+.node b { display: block; font: 700 13px var(--f-display); }
+.node span { font-size: 10.5px; color: var(--muted); }
+.link { flex: 1 1 20px; min-width: 20px; display: grid; justify-items: center; gap: 2px; padding: 0 3px; }
 .link i { display: block; height: 3px; width: 100%; background: var(--line); border-radius: 2px; }
 .link.ok i { background: var(--ok); }
 .link.bad i { background: var(--alarm); }
-.link small { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.link.bad small { color: var(--alarm); font-weight: 600; }
+.link small { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.link.bad small { color: var(--alarm); font-weight: 700; }
 
 /* Ejes */
-.axes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.axis.alarm { box-shadow: 0 0 0 2px var(--alarm), var(--shadow); }
-.axis > header h2 { font-size: 22px; font-weight: 700; }
-.axis > header h2 small { font: 400 14px var(--f-body); color: var(--muted); margin-left: 6px; }
-.pos { display: flex; align-items: baseline; gap: 6px; }
-.pos .v { font-size: 40px; font-weight: 600; line-height: 1; letter-spacing: -.02em; color: var(--ink); }
-.pos .u { font-size: 18px; font-weight: 500; color: var(--muted); }
-.pos-sub { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 13px; margin-top: 6px; }
-.pos-sub b { color: var(--ink); font-weight: 500; font-family: var(--f-data); }
-.range { position: relative; height: 16px; margin: 12px 4px 18px; }
+.axis.alarm { box-shadow: 0 0 0 2px var(--alarm); }
+.axis > header h2 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.axis > header h2 small { font: 500 12.5px var(--f-body); color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+.axrow { display: grid; grid-template-columns: 1.15fr 1fr 1.2fr; gap: 8px; align-items: end; }
+.pos { display: flex; align-items: baseline; gap: 4px; }
+.pos .v { font-size: 34px; font-weight: 700; line-height: 1; letter-spacing: -.03em; }
+.pos .u { font-size: 14px; font-weight: 600; color: var(--muted); }
+.metric { min-width: 0; }
+.metric .v { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -.02em; }
+.metric .v small { font: 500 11px var(--f-body); color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+.pos-sub { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+.pos-sub b { color: var(--ink); font-weight: 600; font-family: var(--f-data); }
+.range { position: relative; height: 12px; margin: 10px 4px 16px; }
 .range::before { content: ""; position: absolute; left: 0; right: 0; bottom: 3px; height: 4px; border-radius: 2px; background: var(--panel-2); }
-.range .tick { position: absolute; bottom: 0; width: 1px; height: 10px; background: var(--line); }
-.range .cur { position: absolute; bottom: -2px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); box-shadow: 0 0 0 2px var(--process), 0 1px 3px rgba(0,0,0,.2); transform: translateX(-7px); transition: left .4s; }
-.range .ends { position: absolute; top: 100%; left: 0; right: 0; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
-.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 16px; }
-.metric .v { font-size: 22px; font-weight: 600; }
-.metric .v small { font: 400 12px var(--f-body); color: var(--muted); margin-left: 3px; }
+.range .tick { position: absolute; bottom: 1px; width: 1px; height: 8px; background: var(--line); }
+.range .cur { position: absolute; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); box-shadow: 0 0 0 2.5px var(--process); transform: translateX(-6px); transition: left .4s; }
+.range .ends { position: absolute; top: 100%; left: 0; right: 0; display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 1px; }
 .v.warn, .val.warn { color: var(--warn) !important; }
 .v.alarm, .val.alarm { color: var(--alarm) !important; }
-.bar { position: relative; height: 8px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+.bar { position: relative; height: 7px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
 .bar > b { position: absolute; inset: 0 auto 0 0; background: var(--process); width: 0; border-radius: 999px; transition: width .3s; }
 .bar.warn > b { background: var(--warn); }
 .bar.alarm > b { background: var(--alarm); }
 .bar > u { position: absolute; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--warn) 70%, transparent); }
 .bar > u.hi { background: color-mix(in srgb, var(--alarm) 70%, transparent); }
-.spark { margin-top: 10px; }
-.spark svg { height: 48px; border-radius: 10px; }
-.leds { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
-.led { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--panel-2); }
-.led::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--stale); }
+.spark { margin-top: 8px; }
+.spark svg { height: 64px; border-radius: 10px; }
+.leds { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
+.led { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--panel-2); }
+.led::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--stale); }
 .led.on { color: var(--ink); }
 .led.on::before { background: var(--ok); }
-.led.bad { color: var(--alarm); background: color-mix(in srgb, var(--alarm) 14%, transparent); }
+.led.bad { color: var(--alarm); }
 .led.bad::before { background: var(--alarm); }
 
-/* Sistema + alarmas */
-.bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; }
-.rows { display: grid; gap: 12px; }
-.row { display: grid; grid-template-columns: 100px minmax(0, 1fr) 72px; gap: 12px; align-items: center; }
-.row .val { text-align: right; font: 600 15px var(--f-data); font-variant-numeric: tabular-nums; }
-.row .name { display: grid; }
-.row .name .lbl { color: var(--ink); font-weight: 600; }
-.row .name small { font-size: 11px; color: var(--muted); }
-.state-txt { font-size: 13px; font-weight: 600; text-align: right; color: var(--ok); }
+/* Sistema */
+.rows { display: grid; gap: 8px; }
+.row { display: grid; grid-template-columns: 78px minmax(0, 1fr) 64px; gap: 10px; align-items: center; }
+.row .val { text-align: right; font: 700 13.5px var(--f-data); font-variant-numeric: tabular-nums; }
+.row .name { display: grid; line-height: 1.2; }
+.row .name .lbl { color: var(--ink); font-weight: 700; }
+.row .name small { font-size: 10.5px; color: var(--muted); }
+.state-txt { font-size: 12.5px; font-weight: 700; text-align: right; color: var(--ok); }
 .state-txt.alarm { color: var(--alarm); }
-.divider { height: .5px; background: var(--line); }
-.note { font-size: 12px; color: var(--muted); margin: 12px 0 0; max-width: 80ch; }
-.tbl-wrap { overflow-x: auto; padding: 4px 6px 10px; }
-table { border-collapse: collapse; width: 100%; min-width: 600px; }
-th, td { text-align: left; padding: 9px 12px; vertical-align: middle; font-size: 14px; }
-tbody tr + tr td { border-top: .5px solid var(--line); }
-th { font-size: 12px; font-weight: 500; color: var(--muted); border-bottom: .5px solid var(--line); }
-td.t { font-family: var(--f-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.prio { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font: 700 12px var(--f-data); }
+.divider { height: 1px; background: var(--line); }
+.note { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.drv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.drv > div { background: var(--panel-2); border-radius: 12px; padding: 7px 10px; display: grid; }
+.drv .state-txt { text-align: left; }
+
+/* Alarmas */
+.alarms { display: flex; flex-direction: column; }
+.alist { padding: 4px 10px 10px; overflow-y: auto; min-height: 0; flex: 1; }
+.al { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 8px 6px; }
+.al + .al { border-top: 1px solid var(--line); }
+.al b { display: block; font-size: 12.5px; font-weight: 700; line-height: 1.25; }
+.al .meta { display: block; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.al button { font-size: 11.5px; padding: 4px 10px; }
+.al.cleared b { color: var(--muted); font-weight: 500; }
+.prio { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font: 800 11px var(--f-data); }
 .prio.p1 { background: var(--alarm); color: #fff; }
-.prio.p2 { background: var(--warn); color: #1d1d1f; }
-tr.unack td:first-child .prio { animation: pulso 1.2s ease-in-out infinite; }
+.prio.p2 { background: var(--warn); color: #111; }
+.al.unack .prio { animation: pulso 1.2s ease-in-out infinite; }
 @keyframes pulso { 50% { opacity: .35; } }
-tr.cleared td { color: var(--muted); }
-.empty { color: var(--muted); padding: 18px 12px; }
+.empty { color: var(--muted); padding: 10px 6px; font-size: 12.5px; }
 
-/* Conexión */
-.conn { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: end; }
-.conn label { display: grid; gap: 6px; }
-input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2); border: 0; border-radius: 10px; padding: 9px 12px; width: 100%; min-width: 0; }
-.err { color: var(--alarm); font-weight: 600; }
-
+/* Conexión: ventana flotante */
+.modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .3); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.modal[hidden] { display: none; }
+.modal .panel { width: min(640px, 100%); max-height: calc(100dvh - 32px); overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.conn { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: end; }
+.conn label { display: grid; gap: 5px; }
+input { font: 14px var(--f-body); color: var(--ink); background: var(--panel-2); border: 0; border-radius: 12px; padding: 9px 12px; width: 100%; min-width: 0; }
+.err { color: var(--alarm); font-weight: 700; }
 .stale .live { color: var(--stale) !important; }
-@media (max-width: 1100px) {
-  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .kpis .verdict, .kpis .timer { grid-column: 1 / -1; }
-  .cell, .duo, .bottom { grid-template-columns: minmax(0, 1fr); }
-  .axes { grid-template-columns: minmax(0, 1fr); }
+
+/* ---------- Computador: cada pestaña en una sola pantalla, sin scroll ---------- */
+@media (min-width: 1000px) {
+  html, body { height: 100%; overflow: hidden; }
+  .stage {
+    position: absolute; left: 0; top: 0; width: 1600px; height: 900px; max-width: none; margin: 0;
+    padding: 0 22px 18px 96px; gap: 14px; grid-template-rows: 64px 50px 112px minmax(0, 1fr); transform-origin: 0 0;
+  }
+  .topbar { padding-top: 0; flex-wrap: nowrap; }
+  .tabs { order: 0; width: auto; position: absolute; left: 50%; transform: translateX(-50%); top: 12px; }
+  .tab { flex: none; }
+  .rail { position: absolute; left: 20px; top: 50%; bottom: auto; transform: translateY(-50%); flex-direction: column; }
+  .rail .tip { left: calc(100% + 10px); bottom: auto; top: 50%; transform: translateY(-50%); }
+  .kpis { grid-template-columns: 1.35fr 1.6fr .85fr .85fr .85fr; gap: 14px; }
+  .kpis .verdict, .kpis .timer { grid-column: auto; }
+  .pane { min-height: 0; gap: 14px; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .col > * { flex: none; }
+  .col > .grow { flex: 1 1 0; min-height: 0; }
+  #paneResumen { grid-template-columns: 400px minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1.25fr) minmax(0, 1fr); }
+  #paneResumen .r-gauge { grid-row: 1; grid-column: 1; }
+  #paneResumen .r-hist { grid-row: 1; grid-column: 2; }
+  #paneResumen .r-alarm { grid-row: 1 / 3; grid-column: 3; }
+  #paneResumen .r-comm { grid-row: 2; grid-column: 1; }
+  #paneResumen .r-sys { grid-row: 2; grid-column: 2; }
+  #paneEstacion { grid-template-columns: 540px minmax(0, 1fr) 330px; }
+  #paneEjes { grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #paneEjes > #axes { display: contents; }
+  #paneEjes .pico-row { grid-column: 1 / -1; }
+  .r-sys .rows { grid-template-columns: 1fr 1fr 1fr; gap: 10px 16px; }
+  .r-sys .row { grid-template-columns: minmax(0, 1fr) 64px; }
+  .r-sys .row .bar { grid-column: 1 / -1; grid-row: 2; }
+  .seq li { padding: 9px 12px; }
+  .r-hist { display: flex; flex-direction: column; }
+  .r-hist .body { flex: 1; min-height: 0; }
+  .r-hist svg { height: 100%; }
+  #paneEjes .axis { display: flex; flex-direction: column; }
+  #paneEjes .axis .body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #paneEjes .spark { flex: 1; min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+  #paneEjes .spark svg { flex: 1; height: auto; min-height: 0; }
+  #paneEstacion .mini svg { max-height: 200px; }
 }
-@media (max-width: 560px) {
-  .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-  .kpis > :last-child { grid-column: 1 / -1; }
-  .kpi .v { font-size: 28px; }
-  .hero h1 { font-size: 30px; }
-  .view { grid-template-columns: minmax(0, 1fr) 58px; }
-  .mini { gap: 12px; }
-  .mini .panel > header { padding: 12px 12px 0; }
-  .mini .body { padding: 8px 12px 12px; }
-  .row { grid-template-columns: 86px minmax(0, 1fr) 66px; }
-  .topbar .brand { display: none; }
-  .wrap { gap: 12px; }
+@media (max-width: 999px) {
+  .stage { position: static; }
+  .alist { max-height: 360px; }
+  #paneEjes > #axes { display: grid; gap: 12px; }
+}
+@media (max-width: 480px) {
+  .cycle-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .titlebar h1 { font-size: 26px; }
+  .brand span:last-child { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  tr.unack td:first-child .prio { animation: none; box-shadow: 0 0 0 2px var(--ink); }
+  .al.unack .prio { animation: none; box-shadow: 0 0 0 2px var(--ink); }
   .bar > b, .range .cur { transition: none; }
 }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <span class="brand">SCARA RRP · Estación 1</span>
-  <span class="chip" id="chipConn"><span class="dot"></span><span>Sin conexión</span></span>
-  <span class="chip"><span class="num" id="age">—</span></span>
-  <span class="chip num" id="clock">--:--:--</span>
-  <div class="actions">
-    <button type="button" id="btnFault" title="Solo en modo demo">Simular falla</button>
-    <button type="button" id="btnConnToggle">Conexión</button>
-  </div>
-</div>
-
-<div class="wrap" id="app">
-  <div class="hero">
-    <h1>Estación 1</h1>
-    <p>Pick &amp; Place de PCB · Grupo 7-G · Pico, STM32F030 y FC41D</p>
-  </div>
-
-  <section class="panel" id="connPanel" hidden>
+<div class="modal" id="connPanel" hidden>
+  <section class="panel" role="dialog" aria-label="Conexión">
     <header><h2>Conexión</h2><span class="lbl" id="connState"></span></header>
     <div class="body">
       <form class="conn" id="connForm">
@@ -295,82 +356,150 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
           <button type="submit" class="primary">Conectar</button>
           <button type="button" id="btnServ">Usar servidor</button>
           <button type="button" id="btnDemo">Modo demo</button>
+          <button type="button" id="btnClose">Cerrar</button>
         </div>
       </form>
       <p class="note">Si la página se abre desde el backend (<span class="num">web/backend</span>), se conecta sola al servidor, que ya escucha el broker y guarda el historial. Sin servidor, la conexión directa escucha <span class="num">&lt;prefijo&gt;/estado</span> y <span class="num">&lt;prefijo&gt;/evento</span> del STM32, y <span class="num">&lt;prefijo&gt;/est1</span> que publica el PC con ROS 2. El prefijo tiene que ser el mismo de <span class="num">stm32/inc/wifi_config.h</span>. Es una página de solo lectura: no manda comandos al robot.</p>
     </div>
   </section>
+</div>
+
+<div class="stage" id="app">
+  <nav class="rail" aria-label="Acciones">
+    <button type="button" id="btnConnToggle" aria-label="Conexión"><svg viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/><path d="M2 9a14.5 14.5 0 0 1 20 0"/></svg><span class="tip">Conexión</span></button>
+    <button type="button" id="btnFault" aria-label="Simular falla"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span class="tip">Simular falla (demo)</span></button>
+    <button type="button" id="btnTheme" aria-label="Cambiar tema"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span class="tip">Tema claro u oscuro</span></button>
+  </nav>
+
+  <div class="topbar">
+    <div class="brand"><span class="logo">7G</span><span>SCARA RRP · Grupo 7-G</span></div>
+    <div class="tabs" role="tablist" aria-label="Vistas">
+      <button type="button" class="tab" role="tab" data-pane="paneResumen" aria-selected="true">Resumen <span class="badge" id="tabAlm"></span></button>
+      <button type="button" class="tab" role="tab" data-pane="paneEstacion" aria-selected="false">Estación <span class="badge" id="tabTarj"></span></button>
+      <button type="button" class="tab" role="tab" data-pane="paneEjes" aria-selected="false">Ejes <span class="badge">3</span></button>
+    </div>
+    <span class="chip" id="chipConn"><span class="dot"></span><span>Sin conexión</span></span>
+    <span class="avatar" title="Grupo 7-G">E1</span>
+  </div>
+
+  <div class="titlebar">
+    <h1 id="paneTitle">Resumen</h1>
+    <span class="sub">Estación 1 · Pick &amp; Place de PCB</span>
+    <span class="livepill"><span class="dot"></span><span id="age">—</span></span>
+    <span class="livepill num" id="clock">--:--:--</span>
+  </div>
 
   <div class="kpis">
-    <section class="panel kpi verdict" id="verdict">
+    <section class="panel kpi verdict feature" id="verdict">
       <span class="lbl">Estado de la estación</span>
       <span class="big" id="verdictTxt">Esperando datos</span>
       <span class="sub" id="verdictSub"></span>
     </section>
     <section class="panel kpi timer">
-      <div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline; flex-wrap:wrap">
-        <span class="lbl">Tiempo de ciclo · objetivo 20–50 s</span><span class="tag" id="tWin">—</span>
-      </div>
+      <div class="timer-top"><span class="lbl">Tiempo de ciclo · objetivo 20–50 s</span><span class="tag" id="tWin">—</span></div>
       <span class="v live" id="tCiclo">—</span>
       <div class="window"><span class="band" style="left:33.33%; width:50%"></span><span class="fill" id="winFill"></span><span class="last" id="winLast" hidden></span><span class="mark" id="winMark" hidden></span></div>
       <div class="scale"><span style="left:0%; transform:none">0</span><span style="left:33.33%">20</span><span style="left:83.33%">50</span><span style="left:100%; transform:translateX(-100%)">60 s</span></div>
     </section>
-    <section class="panel kpi">
-      <span class="lbl">Tarjeta</span>
-      <span class="v live" id="kTarjeta">—</span>
-      <span class="sub" id="kGiro">—</span>
+    <section class="panel kpi"><span class="lbl">Tarjeta</span><span class="v live" id="kTarjeta">—</span><span class="sub" id="kGiro">—</span></section>
+    <section class="panel kpi"><span class="lbl">Último ciclo</span><span class="v live" id="kUltimo">—</span><span class="sub" id="kUltimoSub">—</span></section>
+    <section class="panel kpi"><span class="lbl">Ciclos completos</span><span class="v live" id="kCiclos">—</span><span class="sub" id="kCiclosSub">contados por el robot</span></section>
+  </div>
+
+  <!-- Resumen -->
+  <div class="pane" id="paneResumen" role="tabpanel">
+    <section class="panel feature gauge-card r-gauge">
+      <header><h2>Ritmo del ciclo</h2><span class="tag" id="gTag">—</span></header>
+      <div class="body">
+        <svg id="gauge" viewBox="0 0 300 172" role="img" aria-label="Medidor del tiempo de ciclo"></svg>
+        <div class="gauge-foot"><b id="gTxt">Sin datos</b><span id="gSub">El objetivo es de 20 a 50 s por ciclo.</span></div>
+      </div>
     </section>
-    <section class="panel kpi">
-      <span class="lbl">Último ciclo</span>
-      <span class="v live" id="kUltimo">—</span>
-      <span class="sub" id="kUltimoSub">—</span>
+    <section class="panel hist r-hist">
+      <header><h2>Últimos ciclos</h2><span class="seg"><span class="on" id="hN">—</span><span id="hProm">prom. —</span></span></header>
+      <div class="body"><svg id="hist" viewBox="0 0 640 230" role="img" aria-label="Duración de los últimos ciclos"></svg></div>
     </section>
-    <section class="panel kpi">
-      <span class="lbl">Ciclos completos</span>
-      <span class="v live" id="kCiclos">—</span>
-      <span class="sub" id="kCiclosSub">contados por el robot</span>
+    <section class="panel alarms r-alarm">
+      <header><h2>Alarmas</h2><button type="button" id="btnAckAll">Reconocer todas</button></header>
+      <div style="padding:2px 16px 0"><span class="lbl" id="almCount"></span></div>
+      <div class="alist" id="almBody"></div>
+    </section>
+    <section class="panel r-comm">
+      <header><h2>Comunicación</h2><span class="tag" id="fmtTag"></span></header>
+      <div class="body">
+        <div class="chain">
+          <div class="node"><b>Pico</b><span>control</span></div>
+          <div class="link" id="lkI2C"><small>I2C</small><i></i><small id="lkI2Ct">—</small></div>
+          <div class="node"><b>STM32</b><span>protección</span></div>
+          <div class="link" id="lkUart"><small>Wi-Fi</small><i></i><small id="lkUartt">—</small></div>
+          <div class="node"><b>FC41D</b><span>MQTT</span></div>
+        </div>
+        <div class="chain" style="margin-top:10px">
+          <div class="link" id="lkWeb"><small>Broker</small><i></i><small id="lkWebt">—</small></div>
+          <div class="node"><b>HMI</b><span>esta página</span></div>
+        </div>
+      </div>
+    </section>
+    <section class="panel r-sys">
+      <header><h2>Sistema</h2><span class="tag">Temperatura: aviso 70 °C, alarma 85 °C · 3.3 V: 3.1–3.5 V</span></header>
+      <div class="body">
+        <div class="rows">
+          <div class="row"><span class="name"><span class="lbl">Pico</span><small>RP2040</small></span><div class="bar" id="bTpico"><b></b><u style="left:70%"></u><u class="hi" style="left:85%"></u></div><span class="val live" id="vTpico">—</span></div>
+          <div class="row"><span class="name"><span class="lbl">STM32</span><small>F030</small></span><div class="bar" id="bTstm"><b></b><u style="left:70%"></u><u class="hi" style="left:85%"></u></div><span class="val live" id="vTstm">—</span></div>
+          <div class="row"><span class="name"><span class="lbl">3.3 V</span><small>VDDA</small></span><div class="bar" id="bVdda"><b></b><u style="left:77.5%"></u><u class="hi" style="left:87.5%"></u></div><span class="val live" id="vVdda">—</span></div>
+        </div>
+        <div class="drv" style="margin-top:12px">
+          <div><span class="lbl">Drivers M1 · IFX007T</span><span class="state-txt live" id="drvR1">—</span></div>
+          <div><span class="lbl">Drivers M2 · IFX007T</span><span class="state-txt live" id="drvR2">—</span></div>
+          <div><span class="lbl">Drivers M3 · IFX007T</span><span class="state-txt live" id="drvP">—</span></div>
+        </div>
+      </div>
     </section>
   </div>
 
-  <div class="cell">
+  <!-- Estación -->
+  <div class="pane" id="paneEstacion" role="tabpanel" hidden>
     <section class="panel">
       <header><h2>Celda de trabajo</h2><span class="tag">Vista superior · R1, R2 y P</span></header>
       <div class="body">
         <div class="view">
-          <div>
-            <svg id="arm" viewBox="0 0 400 290" role="img" aria-label="Brazo, pila y bandeja vistos desde arriba"></svg>
-            <div class="legend"><span><i></i>Tarjeta virgen</span><span><b></b>Agujero H1</span><span>Esquema, no a escala real</span></div>
-          </div>
+          <svg id="arm" viewBox="0 0 400 290" role="img" aria-label="Brazo, pila y bandeja vistos desde arriba"></svg>
           <svg id="pGauge" viewBox="0 0 76 290" role="img" aria-label="Altura del eje P"></svg>
         </div>
+        <div class="legend"><span><i></i>Tarjeta virgen</span><span><b></b>Agujero H1</span><span>Esquema, no a escala real</span></div>
       </div>
     </section>
-
-    <div class="side">
+    <div class="col">
       <section class="panel">
-        <header><h2>Secuencia por tarjeta</h2><span class="tag" id="seqTag">—</span></header>
-        <div class="body">
-          <ol class="seq" id="seq"></ol>
-          <div class="nodata" id="seqNo" hidden>No llega <span class="num">scara/est1</span> desde el PC (ROS 2), así que no hay tarjeta ni fase. El resto de la página funciona igual.</div>
-        </div>
+        <header><h2>Tarjetas del ciclo</h2><span class="tag">pila → ventosa → bandeja</span></header>
+        <div class="body"><div class="board" id="board"></div></div>
       </section>
       <div class="mini">
         <section class="panel">
-          <header><h2>Pila en cruz</h2><span class="tag">0° / 90°</span></header>
+          <header><h2>Pila en cruz</h2><span class="tag">0°/90°</span></header>
           <div class="body"><svg id="pila" viewBox="0 0 160 150" role="img" aria-label="Pila de tarjetas con orientación alternada"></svg></div>
         </section>
         <section class="panel">
-          <header><h2>Bandeja</h2><span class="tag">H1 abajo a la izq.</span></header>
+          <header><h2>Bandeja</h2><span class="tag">H1 abajo izq.</span></header>
           <div class="body"><svg id="bandeja" viewBox="0 0 160 150" role="img" aria-label="Bandeja de transporte con 4 posiciones"></svg></div>
         </section>
       </div>
     </div>
+    <section class="panel">
+      <header><h2>Secuencia por tarjeta</h2><span class="tag" id="seqTag">—</span></header>
+      <div class="body">
+        <ol class="seq" id="seq"></ol>
+        <div class="nodata" id="seqNo" hidden>No llega <span class="num">scara/est1</span> desde el PC (ROS 2), así que no hay tarjeta ni fase. El resto de la página funciona igual.</div>
+      </div>
+    </section>
   </div>
 
-  <div class="duo">
-    <section class="panel">
+  <!-- Ejes -->
+  <div class="pane" id="paneEjes" role="tabpanel" hidden>
+    <div id="axes"></div>
+    <section class="panel pico-row">
       <header><h2>Ciclo de la Pico</h2><span class="tag" id="cicloTxt">—</span></header>
-      <div class="body">
+      <div class="body" style="display:flex; gap:24px; align-items:center; flex-wrap:wrap">
         <div class="cycle" id="cycle">
           <div class="step" data-s="ARRANQUE">Arranque</div>
           <div class="step" data-s="ESPERA">Espera</div>
@@ -383,55 +512,12 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
           <div class="step side" data-s="FALLA">Falla</div>
           <div class="step side" data-s="SIN_PICO">Sin Pico</div>
         </div>
-        <div class="cycle-meta">
+        <div class="cycle-meta" style="margin:0; flex:1; min-width:300px">
           <div class="kv"><span class="lbl">En este estado</span><span class="v live" id="enEstado">—</span></div>
           <div class="kv"><span class="lbl">Lazo de control</span><span class="v live" id="loopRate">—</span></div>
           <div class="kv"><span class="lbl">Contador del lazo</span><span class="v live" id="loopN">—</span></div>
           <div class="kv"><span class="lbl">STM32 encendido</span><span class="v live" id="up">—</span></div>
         </div>
-      </div>
-    </section>
-    <section class="panel">
-      <header><h2>Comunicación</h2><span class="tag" id="fmtTag"></span></header>
-      <div class="body">
-        <div class="chain">
-          <div class="node"><b>Pico</b><span>control</span></div>
-          <div class="link" id="lkI2C"><small>I2C</small><i></i><small id="lkI2Ct">—</small></div>
-          <div class="node"><b>STM32</b><span>protección</span></div>
-          <div class="link" id="lkUart"><small>Wi-Fi</small><i></i><small id="lkUartt">—</small></div>
-          <div class="node"><b>FC41D</b><span>MQTT</span></div>
-          <div class="link" id="lkWeb"><small>Broker</small><i></i><small id="lkWebt">—</small></div>
-          <div class="node"><b>HMI</b><span>esta página</span></div>
-        </div>
-      </div>
-    </section>
-  </div>
-
-  <div class="axes" id="axes"></div>
-
-  <div class="bottom">
-    <section class="panel">
-      <header><h2>Sistema</h2><span class="tag">Chips y alimentación</span></header>
-      <div class="body">
-        <div class="rows">
-          <div class="row"><span class="name"><span class="lbl">Pico</span><small>RP2040 · interno</small></span><div class="bar" id="bTpico"><b></b><u style="left:70%"></u><u class="hi" style="left:85%"></u></div><span class="val live" id="vTpico">—</span></div>
-          <div class="row"><span class="name"><span class="lbl">STM32</span><small>F030 · interno</small></span><div class="bar" id="bTstm"><b></b><u style="left:70%"></u><u class="hi" style="left:85%"></u></div><span class="val live" id="vTstm">—</span></div>
-          <div class="row"><span class="name"><span class="lbl">3.3 V</span><small>VDDA del STM32</small></span><div class="bar" id="bVdda"><b></b><u style="left:77.5%"></u><u class="hi" style="left:87.5%"></u></div><span class="val live" id="vVdda">—</span></div>
-          <div class="divider"></div>
-          <div class="row"><span class="name"><span class="lbl">Drivers M1</span><small>IFX007T ×2</small></span><span class="tag">sin sensor de temperatura; avisa por IS</span><span class="state-txt live" id="drvR1">—</span></div>
-          <div class="row"><span class="name"><span class="lbl">Drivers M2</span><small>IFX007T ×2</small></span><span></span><span class="state-txt live" id="drvR2">—</span></div>
-          <div class="row"><span class="name"><span class="lbl">Drivers M3</span><small>IFX007T ×2</small></span><span></span><span class="state-txt live" id="drvP">—</span></div>
-        </div>
-        <p class="note">Temperatura de 0 a 100 °C, aviso a 70 °C y alarma a 85 °C. 3.3 V de 0 a 4 V, aviso fuera de 3.1–3.5 V.</p>
-      </div>
-    </section>
-    <section class="panel">
-      <header><h2>Alarmas</h2><div style="display:flex; gap:10px; align-items:center"><span class="lbl" id="almCount"></span><button type="button" id="btnAckAll">Reconocer todas</button></div></header>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th style="width:44px">Prio</th><th>Hora</th><th>Eje</th><th>Descripción</th><th>Valor</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="almBody"></tbody>
-        </table>
       </div>
     </section>
   </div>
@@ -499,21 +585,19 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
   $("axes").innerHTML = EJES.map((e) => {
     const c = CFG.ejes[e];
     const ticks = [0, 25, 50, 75, 100].map((p) => `<span class="tick" style="left:${p}%"></span>`).join("");
-    return `<section class="panel axis" id="ax${e}">
+    return `<section class="panel axis grow" id="ax${e}">
       <header><h2>${e}<small>${c.nombre} · ${c.motor}</small></h2><span class="chip" id="st${e}"><span class="dot"></span><span>—</span></span></header>
       <div class="body">
-        <div class="well">
-          <div class="pos"><span class="v live" id="pos${e}">—</span><span class="u">${c.unidad}</span></div>
-          <div class="pos-sub"><span>Pico <b class="live" id="est${e}">—</b></span>${e === "P" ? "" : `<span>Crudo <b class="live" id="raw${e}">—</b></span>`}<span class="tag">ST1-${c.motor}</span></div>
-        </div>
-        <div class="range">${ticks}<span class="cur" id="rc${e}"></span>
-          <div class="ends"><span>${c.min}</span><span>${c.max} ${c.unidad}</span></div></div>
-        <div class="metrics">
+        <div class="axrow">
+          <div><div class="pos"><span class="v live" id="pos${e}">—</span><span class="u">${c.unidad}</span></div></div>
           <div class="metric"><span class="lbl">Corriente</span><div class="v live" id="i${e}">—</div></div>
           <div class="metric"><span class="lbl">Voltaje al motor</span><div class="v live" id="v${e}">—</div></div>
         </div>
-        <div class="bar" id="ib${e}" style="margin-top:8px"><b></b><u style="left:${(CFG.I_SOST / CFG.I_MAX) * 100}%"></u><u class="hi" style="left:${(CFG.I_PICO / CFG.I_MAX) * 100}%"></u></div>
-        <div class="spark"><svg viewBox="0 0 300 50" preserveAspectRatio="none" id="sp${e}"></svg></div>
+        <div class="pos-sub"><span>Pico <b class="live" id="est${e}">—</b></span>${e === "P" ? "" : `<span>Crudo <b class="live" id="raw${e}">—</b></span>`}<span class="tag">ST1-${c.motor}</span></div>
+        <div class="range">${ticks}<span class="cur" id="rc${e}"></span>
+          <div class="ends"><span>${c.min}</span><span>${c.max} ${c.unidad}</span></div></div>
+        <div class="bar" id="ib${e}"><b></b><u style="left:${(CFG.I_SOST / CFG.I_MAX) * 100}%"></u><u class="hi" style="left:${(CFG.I_PICO / CFG.I_MAX) * 100}%"></u></div>
+        <div class="spark"><span class="lbl">Corriente reciente</span><svg viewBox="0 0 300 50" preserveAspectRatio="none" id="sp${e}"></svg></div>
         <div class="leds">
           <span class="led" id="en${e}">EN</span><span class="led" id="lh${e}">Lím. home</span>
           <span class="led" id="le${e}">Lím. fin</span><span class="led" id="fl${e}">Sin falla</span>
@@ -548,12 +632,13 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
   function renderAlarmas() {
     const body = $("almBody");
     const activas = S.alarmas.filter((a) => a.estado === "activa").length;
+    const badge = $("tabAlm"); badge.textContent = activas || ""; setCls(badge, "hot", activas > 0);
     $("almCount").textContent = `${activas} activas · ${S.alarmas.filter((a) => !a.ack).length} sin reconocer`;
-    if (!S.alarmas.length) { setHTML(body, `<tr><td colspan="7" class="empty">No hay alarmas registradas desde que se abrió la página.</td></tr>`); return; }
-    setHTML(body, S.alarmas.map((a) => `<tr class="${a.ack ? "" : "unack"} ${a.estado === "normal" ? "cleared" : ""}">
-      <td><span class="prio p${a.prio}">${a.prio}</span></td><td class="t">${hhmmss(a.t)}</td><td>${a.eje}</td><td>${a.tipo}</td>
-      <td class="t">${a.valor ?? ""}</td><td>${a.estado === "activa" ? "Activa" : "Normalizada"}${a.ack ? " · reconocida" : ""}</td>
-      <td>${a.ack ? "" : `<button type="button" data-ack="${a.id}">Reconocer</button>`}</td></tr>`).join(""));
+    if (!S.alarmas.length) { setHTML(body, `<div class="empty">No hay alarmas desde que se abrió la página.</div>`); return; }
+    setHTML(body, S.alarmas.map((a) => `<div class="al ${a.ack ? "" : "unack"} ${a.estado === "normal" ? "cleared" : ""}">
+      <span class="prio p${a.prio}">${a.prio}</span>
+      <span><b>${a.tipo}</b><span class="meta">${hhmmss(a.t)} · ${a.eje}${a.valor ? " · " + a.valor : ""} · ${a.estado === "activa" ? "activa" : "normalizada"}${a.ack ? " · reconocida" : ""}</span></span>
+      ${a.ack ? "<span></span>" : `<button type="button" data-ack="${a.id}">Reconocer</button>`}</div>`).join(""));
   }
   $("almBody").addEventListener("click", (ev) => {
     const a = S.alarmas.find((x) => x.id === +ev.target.dataset.ack); if (!a) return;
@@ -698,7 +783,71 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
     const ok = S.tiempos.filter(enVentana).length;
     $("kCiclosSub").textContent = S.tiempos.length ? `${ok} de ${S.tiempos.length} en ventana · prom. ${fmt(S.tiempos.reduce((s, x) => s + x, 0) / S.tiempos.length)} s` : "contados por el robot";
     S.est = has ? st : null;
-    drawPila(S.est); drawBandeja(S.est);
+    drawPila(S.est); drawBandeja(S.est); drawGauge(S.est); drawHist(); drawBoard(S.est);
+  }
+
+  // ---------- Resumen: medidor del ciclo y barras de los últimos ciclos ----------
+  function drawGauge(st) {
+    const fi = st ? faseIdx(st.fase) : -1, corriendo = fi >= 0, T = CFG.T_ESCALA;
+    const tc = st && typeof st.t_ciclo === "number" ? st.t_ciclo : null, tu = st && typeof st.t_ultimo === "number" && st.t_ultimo > 0 ? st.t_ultimo : null;
+    const val = corriendo ? tc : tu;
+    const cx = 150, cy = 150, r = 112;
+    const ang = (s) => Math.PI * (1 - clamp(s, 0, T) / T);
+    const P = (a, rr = r) => `${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy - rr * Math.sin(a)).toFixed(1)}`;
+    const arc = (s1, s2, rr = r) => `M ${P(ang(s1), rr)} A ${rr} ${rr} 0 0 1 ${P(ang(s2), rr)}`;
+    let ticks = "";
+    for (let i = 0; i <= 40; i++) {
+      const s = (i * T) / 40, a = ang(s), mayor = [0, CFG.T_MIN, CFG.T_MAX, T].includes(s);
+      ticks += `<line x1="${P(a, r + 16).split(" ")[0]}" y1="${P(a, r + 16).split(" ")[1]}" x2="${P(a, r + (mayor ? 27 : 21)).split(" ")[0]}" y2="${P(a, r + (mayor ? 27 : 21)).split(" ")[1]}" stroke="var(--feat-ink)" stroke-opacity="${mayor ? 0.9 : 0.3}" stroke-width="${mayor ? 2 : 1.2}" stroke-linecap="round"/>`;
+    }
+    const [kx, ky] = val == null ? [0, 0] : P(ang(val)).split(" ");
+    const fuera = val != null && (corriendo ? val > CFG.T_MAX : !enVentana(val));
+    setHTML($("gauge"), `${ticks}
+      <path d="${arc(0, T)}" fill="none" stroke="var(--feat-line)" stroke-width="16" stroke-linecap="round"/>
+      <path d="${arc(CFG.T_MIN, CFG.T_MAX)}" fill="none" stroke="var(--ok)" stroke-opacity=".45" stroke-width="16"/>
+      ${val == null ? "" : `<path d="${arc(0, Math.max(val, 0.3))}" fill="none" stroke="${fuera ? "var(--warn)" : "var(--feat-ink)"}" stroke-width="16" stroke-linecap="round"/>
+      <circle cx="${kx}" cy="${ky}" r="12" fill="var(--feat)" stroke="var(--feat-ink)" stroke-width="4"/><circle cx="${kx}" cy="${ky}" r="3.5" fill="var(--feat-ink)"/>`}
+      <text x="${cx}" y="${cy - 14}" text-anchor="middle" style="font:800 46px var(--f-display);letter-spacing:-.04em;fill:var(--feat-ink)">${val == null ? "—" : fmt(val)}<tspan style="font:700 18px var(--f-display);fill:var(--feat-muted)"> s</tspan></text>
+      <text x="${cx}" y="${cy + 10}" text-anchor="middle">${corriendo ? "ciclo en curso" : val == null ? "sin ciclos" : "último ciclo"}</text>
+      <text x="${P(ang(0), r + 8).split(" ")[0] - 2}" y="${cy + 20}" text-anchor="middle">0</text>
+      <text x="${P(ang(T), r + 8).split(" ")[0]}" y="${cy + 20}" text-anchor="middle">60 s</text>`);
+    $("gTag").textContent = corriendo && st.tarjeta ? `tarjeta ${st.tarjeta} de 4` : "ventana 20–50 s";
+    $("gTxt").textContent = val == null ? "Sin datos de la estación" : corriendo ? (val > CFG.T_MAX ? "Pasado de 50 s" : val >= CFG.T_MIN ? "Dentro de la ventana" : "En curso") : enVentana(val) ? "Último ciclo dentro de la ventana" : "Último ciclo fuera de la ventana";
+    $("gSub").textContent = corriendo && val <= CFG.T_MAX ? `Quedan ${fmt(CFG.T_MAX - val)} s antes del límite de 50 s.` : "El objetivo es de 20 a 50 s por ciclo.";
+  }
+  function drawHist() {
+    const W = 640, H = 230, L = 34, B = 24, top = 14, n = 14, T = CFG.T_ESCALA, data = S.tiempos.slice(-n);
+    const y = (s) => top + (1 - clamp(s, 0, T) / T) * (H - B - top);
+    const slot = (W - L) / n, bw = slot * 0.6;
+    let out = `<defs><pattern id="rayas" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="var(--panel-2)"/><rect width="2.5" height="7" fill="var(--muted)" opacity=".4"/></pattern></defs>
+      <rect x="${L}" y="${y(CFG.T_MAX)}" width="${W - L}" height="${y(CFG.T_MIN) - y(CFG.T_MAX)}" fill="var(--ok)" opacity=".08"/>`;
+    [0, CFG.T_MIN, CFG.T_MAX, T].forEach((s) => {
+      out += `<line x1="${L}" x2="${W}" y1="${y(s)}" y2="${y(s)}" stroke="var(--line)" ${s === CFG.T_MIN || s === CFG.T_MAX ? 'stroke-dasharray="4 4"' : ""}/><text x="0" y="${y(s) + 4}">${s} s</text>`;
+    });
+    if (!data.length) out += `<text x="${(W + L) / 2}" y="${H / 2}" text-anchor="middle" style="font-size:13px">Todavía no termina ningún ciclo</text>`;
+    data.forEach((v, i) => {
+      const x = L + slot * (n - data.length + i) + (slot - bw) / 2, ult = i === data.length - 1, ok = enVentana(v);
+      out += `<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(0) - y(v)).toFixed(1)}" rx="${(bw / 2).toFixed(1)}" fill="${!ok ? "var(--warn)" : ult ? "var(--process)" : "url(#rayas)"}"/>`;
+      if (ult || !ok) out += `<text x="${(x + bw / 2).toFixed(1)}" y="${(y(v) - 6).toFixed(1)}" text-anchor="middle" style="font-weight:700;fill:var(--ink)">${fmt(v)}</text>`;
+    });
+    setHTML($("hist"), out);
+    $("hN").textContent = `${data.length} ciclos`;
+    $("hProm").textContent = data.length ? `prom. ${fmt(data.reduce((a, b) => a + b, 0) / data.length)} s` : "prom. —";
+  }
+  // Tablero de tarjetas: en pila → en la ventosa → en la bandeja
+  function drawBoard(st) {
+    const c = conteo(st), k = st && st.tarjeta, fi = st ? faseIdx(st.fase) : -1;
+    const corr = (i) => `Corrección ${giroDe(i) === 0 ? "ninguna" : giroDe(i) + "°"}`;
+    const card = (i, extra, cls = "") => `<div class="kcard ${cls}"><div class="k-top"><b>Tarjeta ${i}</b><span class="k-tag">pila a ${CFG.PILA[i - 1]}°</span></div>${extra}</div>`;
+    const L = { pila: [], proc: [], band: [] };
+    for (let i = 1; i <= 4; i++) {
+      if (i <= c.colocadas) L.band.push(card(i, `<div class="kbar"><i style="width:100%"></i></div><div class="k-meta"><span>Posición ${i}</span><span>H1 ✓</span></div>`, "ok"));
+      else if (i > c.recogidas) L.pila.push(card(i, `<div class="k-meta"><span>${corr(i)}</span><span>${st && i === c.recogidas + 1 && fi >= 0 ? "va ahora" : ""}</span></div>`));
+      else L.proc.push(card(i, `<div class="kbar"><i style="width:${fi >= 0 ? pct(fi + 1, 0, FASES.length) : 50}%"></i></div><div class="k-meta"><span>${fi >= 0 ? FASES[fi][1] : "En la ventosa"}</span><span>${fi >= 0 ? `${fi + 1}/${FASES.length}` : ""}</span></div><div class="k-meta"><span>${corr(i)}</span></div>`));
+    }
+    const lane = (cls, t, arr) => `<div class="lane ${cls}"><header><span class="dot"></span><span>${t}</span><span>${arr.length}</span></header>${arr.join("") || '<div class="kempty">Vacía</div>'}</div>`;
+    setHTML($("board"), lane("", "En pila", L.pila) + lane("proc", "En la ventosa", L.proc) + lane("done", "En bandeja", L.band));
+    $("tabTarj").textContent = st ? `${c.colocadas}/4` : "";
   }
 
   function sparkline(svg, h) {
@@ -743,7 +892,7 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
     else if (d.ciclo === "ESPERA") { big = "Lista para el home"; sub = "La Pico espera el Enter en el PC para empezar."; }
     else if (/^(HOME_|ARRANQUE)/.test(d.ciclo)) { big = "Preparando"; sub = CICLO_TXT[d.ciclo]; }
     else if (st && st.fase === "ESPERA_PILA") { big = "Esperando pila"; sub = st.ciclos ? "Ciclo terminado: las 4 tarjetas están en la bandeja." : "Coloca la pila de 4 tarjetas en cruz."; }
-    v.className = "panel kpi verdict " + cls; $("verdictTxt").textContent = big; $("verdictSub").textContent = sub;
+    v.className = "panel kpi verdict feature " + cls; $("verdictTxt").textContent = big; $("verdictSub").textContent = sub;
   }
 
   // ---------- Celda: brazo, pila y bandeja ----------
@@ -1002,6 +1151,7 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
   function demo() {
     pararDemo(); desconectar(); limpiar(); SIM.fallaPend = false; simInit();
     S.modo = "demo"; $("connState").textContent = "";
+    S.tiempos = [33.2, 35.8, 31.9, 47.6, 34.4, 52.3, 33.0, 36.1]; // historial simulado para el modo demo
     let acc = 0;
     simTimer = setInterval(() => { simPaso(0.1); acc += 100; if (acc >= CFG.PERIODO_MS) { acc = 0; enviarSim(); } }, 100);
     enviarSim();
@@ -1026,6 +1176,34 @@ input { font: 15px var(--f-body); color: var(--ink); background: var(--panel-2);
     ["inUrl", "inPrefix", "inUser"].forEach((id) => store.set("scada." + id, $(id).value));
     conectar({ url: $("inUrl").value.trim(), prefix: $("inPrefix").value.trim() || "scara", user: $("inUser").value.trim(), pass: $("inPass").value });
   });
+  // Pestañas
+  const PANES = { paneResumen: "Resumen", paneEstacion: "Estación", paneEjes: "Ejes" };
+  function verPane(id) {
+    document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.pane === id)));
+    Object.keys(PANES).forEach((p) => ($(p).hidden = p !== id));
+    $("paneTitle").textContent = PANES[id]; store.set("scada.pane", id); tick();
+  }
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => verPane(t.dataset.pane)));
+  verPane(PANES[store.get("scada.pane")] ? store.get("scada.pane") : "paneResumen");
+  // Tema claro u oscuro (se recuerda en este navegador)
+  const raiz = document.documentElement, temaG = store.get("scada.tema");
+  if (temaG === "dark" || temaG === "light") raiz.dataset.theme = temaG;
+  $("btnTheme").addEventListener("click", () => {
+    const oscuro = raiz.dataset.theme ? raiz.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    raiz.dataset.theme = oscuro ? "light" : "dark"; store.set("scada.tema", raiz.dataset.theme);
+  });
+  $("btnClose").addEventListener("click", () => { $("connPanel").hidden = true; });
+  $("connPanel").addEventListener("click", (ev) => { if (ev.target === ev.currentTarget) ev.currentTarget.hidden = true; });
+  // En computador todo va en un lienzo de 900 px de alto que se escala a la ventana: nunca hay scroll
+  const pantalla = matchMedia("(min-width: 1000px)");
+  function ajustar() {
+    const st = $("app");
+    if (!pantalla.matches) { st.style.transform = ""; st.style.width = ""; return; }
+    const W = Math.round(clamp((900 * innerWidth) / innerHeight, 1660, 2100)), k = Math.min(innerWidth / W, innerHeight / 900);
+    st.style.width = W + "px";
+    st.style.transform = `translate(${((innerWidth - W * k) / 2).toFixed(1)}px, ${((innerHeight - 900 * k) / 2).toFixed(1)}px) scale(${k.toFixed(4)})`;
+  }
+  addEventListener("resize", ajustar); pantalla.addEventListener("change", ajustar); ajustar();
   setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("es", { hour12: false }); renderResumen(); }, 500);
 
   renderEstacion(null); drawArm(); renderAlarmas();

@@ -2,7 +2,7 @@
 
 `index.html` es la HMI de la estación. Lo normal es abrirla desde el backend (ver `../README.md`): http://localhost:8000. También se puede abrir con doble clic en el navegador (necesita internet para la librería MQTT y las fuentes).
 
-1. Abre `index.html`. Arranca en **modo demo**: simula el ciclo completo (pila en cruz → 4 tarjetas corregidas en la bandeja, unos 34 s). Diseño estilo Apple, se adapta al tema claro u oscuro del sistema.
+1. Abre `index.html`. Arranca en **modo demo**: simula el ciclo completo (pila en cruz → 4 tarjetas corregidas en la bandeja, unos 34 s). Diseño monocromático (blanco y negro, como la referencia de Simon), con tema claro u oscuro y tres pestañas: Resumen, Estación y Ejes. En computador cada pestaña cabe en una sola pantalla sin scroll (pensada para 1920×1080; se escala a otras resoluciones); en celular las tarjetas se apilan.
 2. Pulsa **Conexión**, revisa el broker (`wss://broker.hivemq.com:8884/mqtt`) y pon el mismo prefijo que tiene el STM32 en `stm32/inc/wifi_config.h` (por defecto `scara`).
 3. Pulsa **Conectar**. La página lee `<prefijo>/estado` (cada 500 ms) y `<prefijo>/evento` (fallas), formato v1 del firmware.
 
